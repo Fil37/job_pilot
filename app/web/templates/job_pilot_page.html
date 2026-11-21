@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="{{ lang }}"{% if theme != 'auto' %} data-theme="{{ theme }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ o.title }} — {{ labels.app_title }}</title>
+  <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
+</head>
+<body>
+<aside class="side">
+  <a class="brand" href="{{ url_for('home') }}"><span class="logo" aria-hidden="true">
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><rect x="1.5" y="1.5" width="13" height="17" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4.5 13.5h7M4.5 16h4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="11" cy="5.5" r="1.8" class="rec"/></svg>
+  </span><span>{{ labels.app_title }}</span></a>
+  <nav class="side-nav">
+    <a href="{{ url_for('home') }}" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8M12 8v8"/></svg><span>{{ _('Home') }}</span></a>
+    <a href="{{ url_for('standup') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>{{ _('Supervision') }}</span></a>
+  </nav>
+  <div class="side-foot">
+    <span class="lang-switch"><a href="{{ url_for('set_language', code='en', next=request.full_path) }}" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a><a href="{{ url_for('set_language', code='fr', next=request.full_path) }}" {% if lang == 'fr' %}aria-current="true"{% endif %}>FR</a></span>
+    <span class="theme-switch" title="{{ _('Theme') }}"><a href="{{ url_for('set_theme', code='light', next=request.full_path) }}" {% if theme == 'light' %}aria-current="true"{% endif %} title="{{ _('Light') }}">☀</a><a href="{{ url_for('set_theme', code='auto', next=request.full_path) }}" {% if theme == 'auto' %}aria-current="true"{% endif %} title="{{ _('Follow the system') }}">A</a><a href="{{ url_for('set_theme', code='dark', next=request.full_path) }}" {% if theme == 'dark' %}aria-current="true"{% endif %} title="{{ _('Dark') }}">☾</a></span>
+    <span class="side-ver">{{ labels.version }} · {{ _('local') }}</span>
+  </div>
+</aside>
+<div class="content">
+<main class="wrap">
+  {#- job_pilot — offer page: offer, experience decision with its source sentence, score, aliases, provenance. -#}
+  <div class="page-head">
+    <div>
+      <p class="crumbs"><a href="{{ url_for('home') }}">← {{ _('Home') }}</a> · {{ _('Offer') }}</p>
+      <h1 class="title-clamp">{{ o.title }}</h1>
+      <p class="chips"><span class="chip">{{ o.company }}</span><span class="chip">{{ o.location or '?' }}</span><span class="chip">{{ o.contract or '?' }}</span>{% if o.salary_text %}<span class="chip">{{ o.salary_text }}</span>{% endif %}<span class="chip">{{ o.source_id }}</span></p>
+    </div>
+    <div class="head-actions">
+      {% if s %}<span class="badge {{ 'failed' if s.eliminated else 'succeeded' }}">{{ '%.0f'|format(s.score) }}</span>{% endif %}
+      <a class="button ghost small" href="{{ o.url }}" rel="noopener noreferrer" target="_blank">↗ {{ _('Open the offer') }}</a>
+      <button type="button" class="ghost small" disabled title="{{ _('Coming at step 7') }}">{{ _('Prepare the application') }}</button>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="stepper">
+      {% for st in steps %}<div class="step {{ st.state }}"><div class="dot">{{ loop.index }}</div><div class="name">{{ _(st.name) }}</div><div class="state">{{ _(st.state) }}</div></div>{% endfor %}
+    </div>
+  </section>
+
+  <div class="dash">
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Experience filter') }}</h2>{% if d %}<span class="badge {{ {'keep': 'succeeded', 'review': 'partial', 'reject': 'failed'}.get(d.user_override or d.decision, 'plain') }}">{{ _(d.user_override or d.decision) }}</span>{% endif %}</div>
+    {% if d %}
+    <dl class="facts">
+      <div><dt>{{ _('Reason') }}</dt><dd>{{ d.reason_code }}</dd></div>
+      <div><dt>{{ _('Years required') }}</dt><dd>{{ d.years_required if d.years_required is not none else '—' }}</dd></div>
+      <div><dt>{{ _('Candidate years') }}</dt><dd>{{ d.candidate_years }}</dd></div>
+      <div><dt>{{ _('Confidence') }}</dt><dd>{{ '%.0f'|format(d.confidence * 100) }} %</dd></div>
+    </dl>
+    <p class="small mt-12">{{ _(reasons.get(d.reason_code, '')) }} <span class="faint">{{ d.reason }}</span></p>
+    {% if d.source_sentence %}<p class="note">« {{ d.source_sentence }} »</p>{% endif %}
+    <p class="tags">{% if d.excludes_internship %}<span class="chip">{{ _('internships not counted') }}</span>{% endif %}{% if d.excludes_apprenticeship %}<span class="chip">{{ _('apprenticeships not counted') }}</span>{% endif %}{% if d.junior_signal %}<span class="chip">junior: {{ d.junior_signal }}</span>{% endif %}{% if d.senior_signal %}<span class="chip">senior: {{ d.senior_signal }}</span>{% endif %}{% if d.user_override %}<span class="chip">{{ _('your decision') }}: {{ _(d.user_override) }}</span>{% endif %}</p>
+    <form method="post" action="{{ url_for('offer_decision', offer_id=o.offer_id) }}" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button name="choice" value="keep" class="good small">{{ _('Keep') }}</button>
+      <button name="choice" value="reject" class="bad small">{{ _('Reject') }}</button>
+      <button name="choice" value="dismiss" class="ghost small">{{ _('Dismiss') }}</button>
+    </form>
+    {% else %}<p class="empty small">{{ _('Not decided yet.') }}</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Scoring') }}</h2>{% if s %}<span class="chip">{{ s.weights_version }}</span>{% endif %}</div>
+    {% if s %}
+    <table><thead><tr><th>{{ _('Components') }}</th><th>{{ _('Value') }}</th><th>{{ _('Weight') }}</th><th></th></tr></thead>
+      <tbody>{% for k, w in s.components.weights.items() %}<tr><td>{{ _(k) }}</td><td>{{ '%.2f'|format(s.components['values'][k]) }}</td><td>{{ w }}</td><td class="small faint">{{ s.components.notes.get(k, '') }}</td></tr>{% endfor %}</tbody></table>
+    <p class="small mt-12"><strong>{{ _('Matched') }}</strong> : {% for m in s.matched %}<span class="chip">{{ m.skill }} ({{ _(m.level) }})</span>{% else %}—{% endfor %}</p>
+    <p class="small"><strong>{{ _('Missing') }}</strong> : {% for m in s.missing %}<span class="chip">{{ m }}</span>{% else %}—{% endfor %}</p>
+    {% if s.eliminated %}<p class="alert">{{ _('Eliminated') }} : {% for e in s.elimination_reasons %}{{ e }} — {{ _(elim.get(e, '')) }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    {% else %}<p class="empty small">{{ _('Not scored yet.') }}</p>{% endif %}
+  </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Description') }}</h2></div>
+    <div class="scroll-box tall"><p class="small pre-line">{{ o.description }}</p></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Seen on') }} <span class="count">{{ aliases|length }}</span></h2>{% if run %}<span class="chip">{{ _('First seen in run') }} {{ run.run_id }}</span>{% endif %}</div>
+    <ul class="list">{% for a in aliases %}<li><span class="badge plain">{{ a.source_id }}</span><a href="{{ a.url }}" rel="noopener noreferrer" target="_blank">{{ a.url[:90] }}</a><span class="small faint">{{ a.seen_at[:16].replace('T', ' ') }}</span></li>{% endfor %}</ul>
+  </section>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "instance_id": "job_pilot-local-1",
+  "environment": "local",
+  "config_version": "1",
+  "profile_path": "app/instance/profile.yaml",
+  "cv_template_path": "app/assets/cv_template.tex",
+  "criteria": {
+    "zones": [
+      {"label": "Paris / Île-de-France", "keywords": ["paris", "ile-de-france", "hauts-de-seine", "seine-saint-denis", "val-de-marne", "75", "92", "93", "94"], "ft_departement": "75"}
+    ],
+    "remote_ok": true,
+    "roles": ["data engineer", "data scientist"],
+    "title_families": ["data_engineer", "data_scientist"],
+    "contracts": ["CDI", "CDD"],
+    "salary_min_eur": 38000,
+    "avoid_sectors": {"defense": ["armement", "defense militaire"], "tobacco": ["tabac", "cigarette"]},
+    "excluded_keywords": ["commercial terrain", "porte-a-porte"],
+    "target_companies": [],
+    "_target_companies_format": [{"name": "Company", "greenhouse": "<board token>"}, {"name": "Company", "lever": "<company id>"}],
+    "experience_rule": {"max_years_required": 2, "count_internships": true, "count_apprenticeships": true, "stretch_years": 1}
+  },
+  "overrides": {},
+  "external_refs": {"mailbox": {"kind": "imap", "host": "", "user": ""}, "portfolio": {"kind": "", "target": ""}}
+}

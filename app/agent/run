@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# job_pilot — launcher of the agent chain.  Examples:
+#   app/agent/run                      daily chain (collect, filter, score)
+#   app/agent/run --chain rescore      re-filter and re-score without collecting
+#   app/agent/run --only agent003      one agent alone
+#   app/agent/run --skip agent002      the daily chain without collecting (agent002 recorded 'skipped')
+#   app/agent/run --list               agents, chains
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+PY=".venv/bin/python"; [ -x "$PY" ] || PY="python3"
+if [ $# -eq 0 ]; then set -- --chain daily; fi
+exec "$PY" -m app.agent.agent000_job_pilot "$@"

@@ -1,0 +1,28 @@
+{
+  "schema_version": "1",
+  "description": "Structure of the run report written by agent000 only (app/instance/runs/<run_id>/report.json, referenced in sup_runs.totals) and of the result envelope every agent returns.",
+  "result_envelope": {
+    "required": ["schema_version", "run_id", "task_id", "agent_id", "status", "data", "artifact_refs", "sources",
+                 "warnings", "errors", "metrics", "started_at", "completed_at"],
+    "status_values": ["succeeded", "partial", "failed", "skipped", "not_run", "blocked", "cancelled"],
+    "error_item": {"category": "one of supervision.ERROR_CATEGORIES", "message": "cleaned text"},
+    "fact_kinds": ["verified_fact", "hypothesis", "estimate", "missing", "retrieval_error"]
+  },
+  "run_report": {
+    "required": ["schema_version", "run_id", "chain", "status", "summary", "tasks_succeeded", "tasks_failed",
+                 "tasks_other", "results", "warnings", "costs", "quality", "limits", "next_steps", "created_at"],
+    "fields": {
+      "summary": "One paragraph computed by the program (no model).",
+      "tasks_succeeded": "list of {agent_id, task_id}",
+      "tasks_failed": "list of {agent_id, task_id, errors}",
+      "tasks_other": "skipped / not_run / partial tasks with their reason",
+      "results": "per agent: its metrics",
+      "warnings": "list of strings",
+      "costs": "supervision.run_cost(run_id)",
+      "quality": "named check outcomes of the run",
+      "limits": "what was NOT verified in this run (disabled sources, missing config...)",
+      "next_steps": "suggested actions for the user",
+      "digest": "daily chain only: top offers and offers to review"
+    }
+  }
+}

@@ -1,0 +1,185 @@
+{
+  "schema_version": "1",
+  "description": "Business records of job_pilot. Each table has ONE owner agent (the only writer). The SQLite tables of app/instance/job_pilot.db are created from this file (app/agent/__init__.py: ensure_business_tables). Supervision tables (sup_runs, sup_tasks, llm_calls, incidents, events, skills, approvals...) come from app/agent/supervision.py.",
+  "types": ["text", "integer", "real", "json", "bool"],
+  "tables": {
+    "profile_versions": {
+      "owner": "agent001",
+      "primary_key": ["profile_hash"],
+      "fields": {
+        "profile_hash": {"type": "text", "required": true},
+        "source_path": {"type": "text", "required": true},
+        "summary": {"type": "json", "required": true},
+        "candidate_months": {"type": "json", "required": true},
+        "run_id": {"type": "text", "required": true},
+        "created_at": {"type": "text", "required": true}
+      }
+    },
+    "search_terms": {
+      "owner": "agent001",
+      "primary_key": ["profile_hash", "kind", "value"],
+      "fields": {
+        "profile_hash": {"type": "text", "required": true},
+        "kind": {"type": "text", "required": true, "enum_ref": "words.term_kinds"},
+        "value": {"type": "text", "required": true},
+        "origin": {"type": "text", "required": true}
+      }
+    },
+    "offer_inbox": {
+      "owner": "web",
+      "description": "Offers pasted by the user in the interface (source 'manual'); read by agent002 which marks them imported.",
+      "primary_key": ["inbox_id"],
+      "autoincrement": true,
+      "fields": {
+        "inbox_id": {"type": "integer", "required": true},
+        "url": {"type": "text", "required": true},
+        "title": {"type": "text", "required": true},
+        "company": {"type": "text", "required": true},
+        "location": {"type": "text", "required": false},
+        "contract": {"type": "text", "required": false},
+        "salary_text": {"type": "text", "required": false},
+        "description": {"type": "text", "required": true},
+        "origin_label": {"type": "text", "required": false},
+        "created_at": {"type": "text", "required": true},
+        "imported_run": {"type": "text", "required": false}
+      }
+    },
+    "source_runs": {
+      "owner": "agent002",
+      "primary_key": ["run_id", "source_id"],
+      "fields": {
+        "run_id": {"type": "text", "required": true},
+        "source_id": {"type": "text", "required": true},
+        "status": {"type": "text", "required": true, "enum_ref": "words.source_statuses"},
+        "queried": {"type": "integer", "required": true},
+        "fetched": {"type": "integer", "required": true},
+        "new_offers": {"type": "integer", "required": true},
+        "merged": {"type": "integer", "required": true},
+        "discarded": {"type": "integer", "required": true},
+        "error": {"type": "text", "required": false},
+        "started_at": {"type": "text", "required": true},
+        "completed_at": {"type": "text", "required": false}
+      }
+    },
+    "offers": {
+      "owner": "agent002",
+      "description": "Normalised offer. status is advanced by agent003 (filtered) and agent004 (scored) through their own tables; offers.status is written by agent002 (new/expired) and by the user (applied/dismissed).",
+      "primary_key": ["offer_id"],
+      "unique": [["dedup_key"]],
+      "fields": {
+        "offer_id": {"type": "text", "required": true},
+        "dedup_key": {"type": "text", "required": true},
+        "title": {"type": "text", "required": true},
+        "company": {"type": "text", "required": true},
+        "location": {"type": "text", "required": false},
+        "contract": {"type": "text", "required": false},
+        "salary_min": {"type": "real", "required": false},
+        "salary_max": {"type": "real", "required": false},
+        "salary_text": {"type": "text", "required": false},
+        "description": {"type": "text", "required": true},
+        "published_at": {"type": "text", "required": false},
+        "expires_at": {"type": "text", "required": false},
+        "url": {"type": "text", "required": true},
+        "source_id": {"type": "text", "required": true},
+        "external_id": {"type": "text", "required": true},
+        "label_experience": {"type": "text", "required": false},
+        "status": {"type": "text", "required": true, "enum_ref": "words.offer_statuses"},
+        "first_seen_run": {"type": "text", "required": true},
+        "first_seen_at": {"type": "text", "required": true},
+        "last_seen_at": {"type": "text", "required": true}
+      }
+    },
+    "offer_aliases": {
+      "owner": "agent002",
+      "description": "Every (source, external id) seen for an offer: duplicates across aggregators are merged here.",
+      "primary_key": ["source_id", "external_id"],
+      "fields": {
+        "source_id": {"type": "text", "required": true},
+        "external_id": {"type": "text", "required": true},
+        "offer_id": {"type": "text", "required": true},
+        "url": {"type": "text", "required": true},
+        "seen_at": {"type": "text", "required": true}
+      }
+    },
+    "experience_decisions": {
+      "owner": "agent003",
+      "primary_key": ["offer_id", "profile_hash"],
+      "fields": {
+        "offer_id": {"type": "text", "required": true},
+        "profile_hash": {"type": "text", "required": true},
+        "run_id": {"type": "text", "required": true},
+        "decision": {"type": "text", "required": true, "enum_ref": "words.experience_decisions"},
+        "reason_code": {"type": "text", "required": true, "enum_ref": "words.experience_reasons"},
+        "reason": {"type": "text", "required": true},
+        "source_sentence": {"type": "text", "required": false},
+        "years_required": {"type": "real", "required": false},
+        "candidate_years": {"type": "real", "required": true},
+        "excludes_internship": {"type": "bool", "required": true},
+        "excludes_apprenticeship": {"type": "bool", "required": true},
+        "junior_signal": {"type": "text", "required": false},
+        "senior_signal": {"type": "text", "required": false},
+        "confidence": {"type": "real", "required": true},
+        "user_override": {"type": "text", "required": false, "description": "written by YOU (web page of the offer), never by an agent"},
+        "decided_at": {"type": "text", "required": true}
+      }
+    },
+    "scores": {
+      "owner": "agent004",
+      "primary_key": ["offer_id", "profile_hash", "weights_version"],
+      "fields": {
+        "offer_id": {"type": "text", "required": true},
+        "profile_hash": {"type": "text", "required": true},
+        "weights_version": {"type": "text", "required": true},
+        "run_id": {"type": "text", "required": true},
+        "score": {"type": "real", "required": true},
+        "components": {"type": "json", "required": true},
+        "matched": {"type": "json", "required": true},
+        "missing": {"type": "json", "required": true},
+        "eliminated": {"type": "bool", "required": true},
+        "elimination_reasons": {"type": "json", "required": true},
+        "scored_at": {"type": "text", "required": true}
+      }
+    },
+    "scoring_weights": {
+      "owner": "agent004",
+      "description": "Versioned weights. New versions are proposed by agent011 and applied only after approval.",
+      "primary_key": ["version"],
+      "fields": {
+        "version": {"type": "text", "required": true},
+        "weights": {"type": "json", "required": true},
+        "origin": {"type": "text", "required": true},
+        "created_at": {"type": "text", "required": true}
+      }
+    },
+    "agent_results": {
+      "owner": "agent000",
+      "description": "Structured result of each task (contract of reports.json/result_envelope).",
+      "primary_key": ["task_id"],
+      "fields": {
+        "task_id": {"type": "text", "required": true},
+        "run_id": {"type": "text", "required": true},
+        "agent_id": {"type": "text", "required": true},
+        "status": {"type": "text", "required": true},
+        "result": {"type": "json", "required": true},
+        "created_at": {"type": "text", "required": true}
+      }
+    },
+    "applications": {
+      "owner": "agent006",
+      "description": "Tracking table. agent006 creates the row (status ready); the user marks it sent; agent009 advances the status from mails.",
+      "primary_key": ["application_id"],
+      "fields": {
+        "application_id": {"type": "text", "required": true},
+        "offer_id": {"type": "text", "required": true},
+        "status": {"type": "text", "required": true, "enum_ref": "words.application_statuses"},
+        "cv_version": {"type": "text", "required": false},
+        "cv_sha256": {"type": "text", "required": false},
+        "source_id": {"type": "text", "required": true},
+        "package_ref": {"type": "text", "required": false},
+        "run_id": {"type": "text", "required": true},
+        "created_at": {"type": "text", "required": true},
+        "sent_at": {"type": "text", "required": false}
+      }
+    }
+  }
+}

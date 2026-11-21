@@ -1,0 +1,62 @@
+{
+  "schema_version": "1",
+  "description": "Declarative registry of the agents. agent000 validates it against its own allow-list of modules (ALLOWED_MODULES): a JSON value can never make the program import or run anything else. Only the entry points listed in 'allowed_entry_points' can be called.",
+  "allowed_entry_points": ["run"],
+  "agents": [
+    {"agent_id": "agent001", "module": "app.agent.agent001_profile_builder", "entry_point": "run", "role": "profile_builder",
+     "inputs": ["profile_file", "criteria"], "outputs": ["profile_versions", "search_terms"], "depends_on": [],
+     "permissions": ["read_profile", "write_db"], "critical": true},
+    {"agent_id": "agent002", "module": "app.agent.agent002_offer_collector", "entry_point": "run", "role": "offer_collector",
+     "inputs": ["search_terms", "sources"], "outputs": ["offers", "offer_aliases", "source_runs"], "depends_on": ["agent001"],
+     "permissions": ["http_job_sources", "write_db"], "critical": true},
+    {"agent_id": "agent003", "module": "app.agent.agent003_experience_filter", "entry_point": "run", "role": "experience_filter",
+     "inputs": ["offers", "profile_versions", "criteria"], "outputs": ["experience_decisions"], "depends_on": ["agent002"],
+     "permissions": ["write_db"], "critical": true},
+    {"agent_id": "agent004", "module": "app.agent.agent004_offer_scorer", "entry_point": "run", "role": "offer_scorer",
+     "inputs": ["offers", "experience_decisions", "search_terms", "criteria"], "outputs": ["scores"], "depends_on": ["agent003"],
+     "permissions": ["write_db"], "critical": true},
+    {"agent_id": "agent005", "module": "app.agent.agent005_company_researcher", "entry_point": "run", "role": "company_researcher",
+     "inputs": ["scores"], "outputs": ["companies", "company_facts"], "depends_on": ["agent004"],
+     "permissions": ["http_public_web", "llm", "write_db"], "critical": false},
+    {"agent_id": "agent006", "module": "app.agent.agent006_application_builder", "entry_point": "run", "role": "application_builder",
+     "inputs": ["offer_id", "profile_file", "cv_template"], "outputs": ["application_package", "applications"], "depends_on": [],
+     "permissions": ["read_profile", "llm", "latex", "write_run_dir", "write_db"], "critical": true},
+    {"agent_id": "agent007", "module": "app.agent.agent007_gap_project_planner", "entry_point": "run", "role": "gap_project_planner",
+     "inputs": ["scores_30_days", "project_briefs"], "outputs": ["skill_gaps", "project_briefs"], "depends_on": [],
+     "permissions": ["llm", "write_db"], "critical": false},
+    {"agent_id": "agent008", "module": "app.agent.agent008_portfolio_publisher", "entry_point": "run", "role": "portfolio_publisher",
+     "inputs": ["project_briefs"], "outputs": ["portfolio_entries", "portfolio_demo"], "depends_on": ["agent007"],
+     "permissions": ["write_run_dir", "publish_portfolio_after_approval"], "critical": false},
+    {"agent_id": "agent009", "module": "app.agent.agent009_inbox_tracker", "entry_point": "run", "role": "inbox_tracker",
+     "inputs": ["mailbox_read_only", "applications"], "outputs": ["email_events", "alerts"], "depends_on": [],
+     "permissions": ["mail_read_only", "llm_minimal", "write_db"], "critical": true},
+    {"agent_id": "agent010", "module": "app.agent.agent010_followup_coach", "entry_point": "run", "role": "followup_coach",
+     "inputs": ["email_events", "applications"], "outputs": ["interview_sheets", "followup_drafts"], "depends_on": ["agent009"],
+     "permissions": ["llm", "write_db", "request_approval"], "critical": false},
+    {"agent_id": "agent011", "module": "app.agent.agent011_pipeline_analyst", "entry_point": "run", "role": "pipeline_analyst",
+     "inputs": ["applications", "email_events", "scores"], "outputs": ["metrics_snapshots", "weights_proposal"], "depends_on": [],
+     "permissions": ["write_db", "request_approval"], "critical": false}
+  ],
+  "chains": {
+    "daily": ["agent001", "agent002", "agent003", "agent004", "agent005"],
+    "rescore": ["agent001", "agent003", "agent004"],
+    "inbox": ["agent009", "agent010"],
+    "weekly": ["agent011", "agent007"],
+    "application": ["agent006"]
+  },
+  "delegation": {
+    "max_depth": 1,
+    "routes": [
+      {"from": "agent004", "to": "agent005", "purpose": "company brief for the top offers"},
+      {"from": "agent009", "to": "agent010", "purpose": "interview sheet or follow-up draft"}
+    ]
+  },
+  "approval_actions": [
+    {"action": "activate_skill", "who": "user", "applied_by": "socle"},
+    {"action": "create_calendar_event", "who": "user", "applied_by": "agent010"},
+    {"action": "send_followup", "who": "user", "applied_by": "user (copies the draft, nothing is sent by the program)"},
+    {"action": "publish_portfolio_entry", "who": "user", "applied_by": "agent008"},
+    {"action": "apply_scoring_weights", "who": "user", "applied_by": "agent004"},
+    {"action": "enable_source", "who": "user", "applied_by": "user (job_pilot.json)"}
+  ]
+}

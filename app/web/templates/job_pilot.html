@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="{{ lang }}"{% if theme != 'auto' %} data-theme="{{ theme }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ _('Home') }} — {{ labels.app_title }}</title>
+  <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
+</head>
+<body>
+<aside class="side">
+  <a class="brand" href="{{ url_for('home') }}"><span class="logo" aria-hidden="true">
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><rect x="1.5" y="1.5" width="13" height="17" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4.5 13.5h7M4.5 16h4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="11" cy="5.5" r="1.8" class="rec"/></svg>
+  </span><span>{{ labels.app_title }}</span></a>
+  <nav class="side-nav">
+    <a href="{{ url_for('home') }}" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8M12 8v8"/></svg><span>{{ _('Home') }}</span></a>
+    <a href="{{ url_for('standup') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>{{ _('Supervision') }}</span></a>
+  </nav>
+  <div class="side-foot">
+    <span class="lang-switch"><a href="{{ url_for('set_language', code='en', next=request.full_path) }}" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a><a href="{{ url_for('set_language', code='fr', next=request.full_path) }}" {% if lang == 'fr' %}aria-current="true"{% endif %}>FR</a></span>
+    <span class="theme-switch" title="{{ _('Theme') }}"><a href="{{ url_for('set_theme', code='light', next=request.full_path) }}" {% if theme == 'light' %}aria-current="true"{% endif %} title="{{ _('Light') }}">☀</a><a href="{{ url_for('set_theme', code='auto', next=request.full_path) }}" {% if theme == 'auto' %}aria-current="true"{% endif %} title="{{ _('Follow the system') }}">A</a><a href="{{ url_for('set_theme', code='dark', next=request.full_path) }}" {% if theme == 'dark' %}aria-current="true"{% endif %} title="{{ _('Dark') }}">☾</a></span>
+    <span class="side-ver">{{ labels.version }} · {{ _('local') }}</span>
+  </div>
+</aside>
+<div class="content">
+<main class="wrap">
+  {#- job_pilot — main page: daily digest, offers to review, launch, manual offer. -#}
+  <section class="hero">
+    <div>
+      <h1 class="rec">{{ _("Today's best offers") }}</h1>
+      <p>{{ _('Finds, filters and ranks offers. Nothing is ever sent without you.') }}</p>
+    </div>
+    <div class="hero-stats">
+      {% for s in stats %}<div><b>{{ s.value }}</b><span>{{ _(s.label) }}</span></div>{% endfor %}
+    </div>
+  </section>
+
+  {% if msg %}<p class="note">{{ _(msg) }}</p>{% endif %}
+  {% if example %}<p class="alert">{{ _('The profile is still the EXAMPLE file: results are illustrative only.') }}</p>{% endif %}
+
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Run the daily search') }}</h2>
+      {% if last %}<span class="chip">{{ _('Last run') }} · <span class="badge {{ last.status }}">{{ _(last.status) }}</span> {{ last.created_at[:16].replace('T', ' ') }}</span>{% endif %}</div>
+    <form method="post" action="{{ url_for('start_run') }}" class="form-foot">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>{{ _('Chain') }}<select name="chain"><option value="daily">{{ _('daily: collect, filter, score') }}</option><option value="rescore">{{ _('rescore: filter and score again') }}</option></select></label>
+      <button type="submit" class="lg"{% if busy %} disabled{% endif %}>▶ {{ _('Launch') }}</button>
+    </form>
+    {% if busy %}<p class="status running">{{ _('A run is in progress.') }}</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _("Today's best offers") }} <span class="count">{{ digest.top|length }}</span></h2></div>
+    {% if digest.top %}
+    <div class="scroll-box tall"><table>
+      <thead><tr><th>{{ _('Score') }}</th><th>{{ _('Offer') }}</th><th>{{ _('Why') }}</th><th>{{ _('Missing') }}</th></tr></thead>
+      <tbody>{% for r in digest.top %}<tr>
+        <td><strong>{{ '%.0f'|format(r.score) }}</strong></td>
+        <td><a href="{{ url_for('offer', offer_id=r.offer_id) }}"><strong>{{ r.title }}</strong></a><br><span class="small faint">{{ r.company }} · {{ r.location or '?' }} · {{ r.contract or '?' }} · {{ r.source_id }}</span></td>
+        <td class="small">{{ r.why|join(' · ') }}</td>
+        <td><span class="tags">{% for m in r.missing %}<span class="chip">{{ m }}</span>{% endfor %}</span></td>
+      </tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="empty"><span class="big">🧭</span>{{ _('Nothing yet. Fill your profile and run the daily search.') }}</p>{% endif %}
+  </section>
+
+  <section class="panel" id="review">
+    <div class="panel-title"><h2>{{ _('Offers to review') }} <span class="count">{{ digest.review|length }}</span></h2></div>
+    {% if digest.review %}
+    <div class="scroll-box"><table>
+      <thead><tr><th>{{ _('Offer') }}</th><th>{{ _('Reason') }}</th><th>{{ _('Source sentence') }}</th></tr></thead>
+      <tbody>{% for r in digest.review %}<tr>
+        <td><a href="{{ url_for('offer', offer_id=r.offer_id) }}"><strong>{{ r.title }}</strong></a><br><span class="small faint">{{ r.company }} · {{ '%.0f'|format(r.score) }}</span></td>
+        <td class="small"><span class="badge partial">{{ r.reason_code }}</span><br>{{ _(reasons.get(r.reason_code, '')) }}<br><span class="faint">{{ r.reason }}</span></td>
+        <td class="small">{% if r.source_sentence %}« {{ r.source_sentence }} »{% else %}—{% endif %}</td>
+      </tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="empty small"><span class="big">✅</span>{{ _('No offer to review.') }}</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Add an offer by hand') }}</h2><span class="hint">{{ _('LinkedIn, Indeed or any site: paste it, it is read at the next run.') }}</span></div>
+    <form method="post" action="{{ url_for('add_offer') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="form-grid">
+        <label>{{ _('URL') }}<input type="url" name="url" required maxlength="2000"></label>
+        <label>{{ _('Title') }}<input type="text" name="title" required maxlength="300"></label>
+        <label>{{ _('Company') }}<input type="text" name="company" required maxlength="200"></label>
+        <label>{{ _('Location') }}<input type="text" name="location" maxlength="200"></label>
+        <label>{{ _('Contract') }}<input type="text" name="contract" maxlength="50"></label>
+        <label>{{ _('Salary') }}<input type="text" name="salary_text" maxlength="200"></label>
+      </div>
+      <label class="mt-12">{{ _('Description') }}<textarea name="description" rows="8" required minlength="40"></textarea></label>
+      <div class="form-foot"><p class="hint">{{ _('The whole description: the experience filter reads all of it.') }}</p><button type="submit">{{ _('Add') }}</button></div>
+    </form>
+  </section>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1",
+  "description": "Structure and default values of the configuration. Non-sensitive only: keys and passwords are read from .env. app/instance/job_pilot.json may override 'defaults' values listed in 'overridable'.",
+  "overridable": ["schedule", "digest", "scoring", "sources", "budgets", "retention"],
+  "defaults": {
+    "agents_enabled": {
+      "agent001": true, "agent002": true, "agent003": true, "agent004": true, "agent005": false,
+      "agent006": false, "agent007": false, "agent008": false, "agent009": false, "agent010": false, "agent011": false
+    },
+    "timeouts_s": {"agent_default": 300, "http_request": 20},
+    "concurrency": {"sources_in_parallel": 3},
+    "retries": {"transient_max": 2, "llm_correction_max": 3},
+    "budgets": {"llm_calls_per_run": 60, "llm_tokens_per_run": 200000, "llm_cost_usd_per_run": 0.5,
+                "http_requests_per_source": 40},
+    "llm": {"provider": null, "model": null, "max_tokens": 2000, "temperature": 0.0,
+            "note": "No provider chosen yet (decision of the user). Agents 001-004 work without any model."},
+    "schedule": {"daily_at": "07:30", "inbox_every_min": 15, "weekly_day": "monday", "scheduler_enabled": false},
+    "digest": {"top_n": 15, "review_max": 30},
+    "scoring": {
+      "weights_version": "w1",
+      "weights": {"skills": 0.40, "level": 0.20, "title": 0.15, "location": 0.10, "salary": 0.10, "sector": 0.05},
+      "unknown_salary_value": 0.5,
+      "remote_counts_as_in_zone": true
+    },
+    "experience": {"borderline_gap_years": 1, "multiple_years_spread": 2},
+    "sources": {
+      "france_travail": {"enabled": true, "kind": "api", "tos_status": "official_api",
+                          "note": "Official API (francetravail.io). Needs FT_CLIENT_ID and FT_CLIENT_SECRET in .env."},
+      "manual": {"enabled": true, "kind": "inbox", "tos_status": "user_provided",
+                 "note": "Offers you paste in the interface (LinkedIn, Indeed, anything)."},
+      "greenhouse": {"enabled": true, "kind": "ats_public_api", "tos_status": "public_job_board_api",
+                     "note": "Public job board API of companies using Greenhouse (boards in job_pilot.json)."},
+      "lever": {"enabled": true, "kind": "ats_public_api", "tos_status": "public_job_board_api",
+                "note": "Public postings API of companies using Lever (companies in job_pilot.json)."},
+      "hellowork": {"enabled": false, "kind": "site", "tos_status": "unverified", "note": "Disabled until its terms are checked; e-mail alerts otherwise."},
+      "welcome_to_the_jungle": {"enabled": false, "kind": "site", "tos_status": "unverified", "note": "Disabled until its terms are checked; e-mail alerts otherwise."},
+      "apec": {"enabled": false, "kind": "site", "tos_status": "unverified", "note": "Disabled until its terms are checked; e-mail alerts otherwise."},
+      "jobteaser": {"enabled": false, "kind": "site", "tos_status": "login_required", "note": "Behind a school login: e-mail alerts only."},
+      "linkedin_alerts": {"enabled": false, "kind": "mail_alert", "tos_status": "mail_alert", "note": "Read from your mailbox by agent009 (step 8)."},
+      "indeed_alerts": {"enabled": false, "kind": "mail_alert", "tos_status": "mail_alert", "note": "Read from your mailbox by agent009 (step 8)."}
+    },
+    "http": {"user_agent": "job_pilot/0.1 (personal job search tool)", "min_delay_s": 1.0},
+    "retention": {"runs_days": 180, "offers_days": 120, "trash_grace_days": 7},
+    "web": {"host": "127.0.0.1", "port": 8791}
+  }
+}

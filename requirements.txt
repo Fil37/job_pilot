@@ -1,0 +1,6 @@
+# job_pilot — Python 3.12
+flask>=3.0            # web interface (app/web)
+python-dotenv>=1.0    # keys read from .env (never versioned)
+pyyaml>=6.0           # profile source file (app/instance/profile.yaml)
+pytest>=8.0           # tests (app/tests) — also runnable without pytest
+# System tools needed later: latexmk + a TeX distribution (agent006, step 7), pdftotext (poppler-utils, present).

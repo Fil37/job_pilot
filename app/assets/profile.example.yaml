@@ -1,0 +1,95 @@
+# job_pilot — EXAMPLE PROFILE (illustrative, NOT your data).
+# Copy to app/instance/profile.yaml and replace everything with your own, verifiable facts.
+# Rule: everything a CV can contain comes from this file (except projects created by agent007).
+#
+# Dates: YYYY-MM or "present".  kind of an experience: internship | apprenticeship | job | freelance
+# Each CV line (bullet) has an id, several possible wordings (variants), the skills it proves and the
+# figures it quotes. Every number written in a variant must be listed in `figures` (check PROFILE_FIGURES_DECLARED),
+# every skill of a bullet must exist in `skills` (check PROFILE_SKILL_DECLARED).
+
+example_profile: true          # remove this line once the file holds your real data
+
+identity:
+  full_name: "Prénom Nom"
+  city: "Paris"
+  email: "prenom.nom@example.org"
+  phone: ""
+  links: {github: "", linkedin: "", portfolio: ""}
+  headline_variants:
+    - "Ingénieur data junior"
+    - "Data engineer — Python, SQL, cloud"
+
+summary_variants:
+  - "Ingénieur diplômé spécialisé en données, à l'aise sur Python et SQL, cherchant un premier poste en CDI."
+
+education:
+  - id: edu_master
+    degree: "Diplôme d'ingénieur — spécialité data"
+    school: "École d'exemple"
+    start: "2021-09"
+    end: "2024-09"
+    bullets:
+      - id: edu_master_b1
+        variants: ["Cours : bases de données, apprentissage automatique, systèmes distribués"]
+        skills: [sql, scikit-learn, spark]
+        figures: []
+
+experiences:
+  - id: exp_stage_fin
+    kind: internship
+    role: "Stagiaire data engineer"
+    company: "Entreprise d'exemple"
+    city: "Paris"
+    start: "2024-03"
+    end: "2024-08"
+    bullets:
+      - id: exp_stage_fin_b1
+        variants:
+          - "Conception d'un pipeline d'ingestion Python / Airflow traitant 2 millions de lignes par jour"
+          - "Pipeline d'ingestion quotidien (2 millions de lignes) en Python et Airflow"
+        skills: [python, airflow, sql]
+        figures: ["2 millions"]
+      - id: exp_stage_fin_b2
+        variants:
+          - "Réduction de 30 % du temps de calcul d'un rapport en optimisant les requêtes SQL"
+        skills: [sql, postgresql]
+        figures: ["30 %"]
+  - id: exp_alternance
+    kind: apprenticeship
+    role: "Alternant développeur"
+    company: "Autre entreprise d'exemple"
+    start: "2022-09"
+    end: "2023-08"
+    bullets:
+      - id: exp_alternance_b1
+        variants: ["Développement d'outils internes en Python et Docker"]
+        skills: [python, docker]
+        figures: []
+
+projects:
+  - id: prj_dashboard
+    name: "Tableau de bord de qualité de l'air"
+    start: "2024-01"
+    end: "2024-02"
+    url: ""
+    bullets:
+      - id: prj_dashboard_b1
+        variants: ["Collecte d'une API publique, stockage PostgreSQL et tableau de bord Flask"]
+        skills: [python, postgresql, flask, rest api]
+        figures: []
+
+skills:
+  - {name: python, level: core}
+  - {name: sql, level: core}
+  - {name: postgresql, level: working}
+  - {name: airflow, level: working}
+  - {name: docker, level: working}
+  - {name: spark, level: notions}
+  - {name: scikit-learn, level: notions}
+  - {name: flask, level: working}
+  - {name: rest api, level: working}
+  - {name: git, level: core}
+
+languages:
+  - {name: "Français", level: "langue maternelle"}
+  - {name: "Anglais", level: "C1"}

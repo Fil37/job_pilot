@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="{{ lang }}"{% if theme != 'auto' %} data-theme="{{ theme }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ _('Supervision') }} — {{ labels.app_title }}</title>
+  <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
+</head>
+<body>
+<aside class="side">
+  <a class="brand" href="{{ url_for('home') }}"><span class="logo" aria-hidden="true">
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><rect x="1.5" y="1.5" width="13" height="17" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4.5 13.5h7M4.5 16h4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="11" cy="5.5" r="1.8" class="rec"/></svg>
+  </span><span>{{ labels.app_title }}</span></a>
+  <nav class="side-nav">
+    <a href="{{ url_for('home') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8M12 8v8"/></svg><span>{{ _('Home') }}</span></a>
+    <a href="{{ url_for('standup') }}" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>{{ _('Supervision') }}</span></a>
+  </nav>
+  <div class="side-foot">
+    <span class="lang-switch"><a href="{{ url_for('set_language', code='en', next=request.full_path) }}" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a><a href="{{ url_for('set_language', code='fr', next=request.full_path) }}" {% if lang == 'fr' %}aria-current="true"{% endif %}>FR</a></span>
+    <span class="theme-switch" title="{{ _('Theme') }}"><a href="{{ url_for('set_theme', code='light', next=request.full_path) }}" {% if theme == 'light' %}aria-current="true"{% endif %} title="{{ _('Light') }}">☀</a><a href="{{ url_for('set_theme', code='auto', next=request.full_path) }}" {% if theme == 'auto' %}aria-current="true"{% endif %} title="{{ _('Follow the system') }}">A</a><a href="{{ url_for('set_theme', code='dark', next=request.full_path) }}" {% if theme == 'dark' %}aria-current="true"{% endif %} title="{{ _('Dark') }}">☾</a></span>
+    <span class="side-ver">{{ labels.version }} · {{ _('local') }}</span>
+  </div>
+</aside>
+<div class="content">
+<main class="wrap">
+  <div class="page-head"><div><h1>{{ _('Supervision') }}</h1><p class="muted">{{ _('Agents, runs, costs and decisions waiting for you.') }}</p></div></div>
+
+  {# ---- tuiles : good / bad / warn colorent la valeur et le liseré #}
+  <div class="tiles">
+    {% for t in tiles %}<div class="tile {{ t.tone or '' }}"><div class="label">{{ _(t.label) }}</div><div class="value">{{ t.value }}</div><div class="sub">{{ _(t.sub) }}</div></div>{% endfor %}
+  </div>
+
+  <div class="dash">
+    {# ---- runs en cours (socle 2.0 : dashboard().runs_active) #}
+    <section class="panel span-2">
+      <div class="panel-title"><h2>{{ _('Runs in progress') }} <span class="count">{{ (runs_active or [])|length }}</span></h2></div>
+      {% if runs_active %}
+      <ul class="list">{% for r in runs_active %}<li><span class="badge running">{{ _(r.status) }}</span><strong>{{ r.title or r.run_id }}</strong><span class="small faint">{{ r.created_at[:16].replace('T', ' ') }}</span></li>{% endfor %}</ul>
+      {% else %}<p class="empty small"><span class="big">☕</span>{{ _('Nothing running.') }}</p>{% endif %}
+    </section>
+
+    {# ---- job_pilot: journal of the sources really queried by the last collection (agent002) #}
+    <section class="panel span-2">
+      <div class="panel-title"><h2>{{ _('Sources queried') }} <span class="count">{{ sources|length }}</span></h2></div>
+      {% if sources %}
+      <div class="scroll-box"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('Status') }}</th><th>{{ _('Requests') }}</th><th>{{ _('Fetched') }}</th><th>{{ _('New') }}</th><th>{{ _('Merged') }}</th><th>{{ _('Error') }}</th></tr></thead>
+        <tbody>{% for s in sources %}<tr><td><strong>{{ s.source_id }}</strong></td><td><span class="badge {{ {'succeeded': 'succeeded', 'valid_empty_result': 'ok', 'failed': 'failed', 'partial': 'partial'}.get(s.status, 'skipped') }}">{{ _(s.status) }}</span></td><td>{{ s.queried }}</td><td>{{ s.fetched }}</td><td>{{ s.new_offers }}</td><td>{{ s.merged }}</td><td class="small">{{ s.error or '' }}</td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<p class="empty small">{{ _('No collection yet.') }}</p>{% endif %}
+    </section>
+
+    {# ---- recent runs (socle: dashboard().runs_recent) #}
+    <section class="panel span-2">
+      <div class="panel-title"><h2>{{ _('Recent runs') }} <span class="count">{{ (runs_recent or [])|length }}</span></h2></div>
+      <div class="scroll-box"><table><thead><tr><th>{{ _('Run') }}</th><th>{{ _('Status') }}</th><th>{{ _('Summary') }}</th></tr></thead>
+        <tbody>{% for r in (runs_recent or [])[:20] %}<tr><td><strong>{{ r.title or r.run_id }}</strong><br><span class="small faint">{{ r.run_id }}</span></td><td><span class="badge {{ r.status }}">{{ _(r.status) }}</span></td><td class="small">{{ (r.totals|fromjson).get('summary', '') if r.totals else '' }}</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title"><h2>{{ _('Agents — Health') }}</h2><button type="button" class="ghost small">{{ _('Re-check') }}</button></div>
+      <ul class="list">
+        {% for a in agents %}<li><span class="badge {{ a.state }}">{{ _(a.state) }}</span><strong>{{ a.id }}</strong><span class="small faint">{{ a.detail or '—' }}{% if a.when %} · {{ a.when[:16].replace('T', ' ') }}{% endif %}</span></li>{% endfor %}
+      </ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title"><h2>{{ _('Incidents') }} <span class="count">{{ incidents|length }}</span></h2></div>
+      {% if incidents %}
+      <div class="scroll-box"><table><thead><tr><th>#</th><th>{{ _('Agent') }}</th><th>{{ _('Error') }}</th><th>{{ _('Action') }}</th></tr></thead>
+        <tbody>{% for i in incidents %}<tr><td>{{ i.id }}</td><td>{{ i.agent }}<br><span class="badge failed">{{ i.error_category }}</span></td><td class="small">{{ i.message }}</td>
+          <td><form method="post" action="{{ url_for('incident_close', incident_id=i.id) }}" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button name="status" value="resolved" class="good small">{{ _('Resolved') }}</button>
+            <button name="status" value="ignored" class="ghost small">{{ _('Ignore') }}</button>
+          </form></td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<p class="empty small"><span class="big">✅</span>{{ _('No open incident.') }}</p>{% endif %}
+    </section>
+
+    {# ---- validations en attente : rien de sensible n'est appliqué sans accord #}
+    <section class="panel span-2" id="approvals">
+      <div class="panel-title"><h2>{{ _('Pending approvals') }} <span class="count">{{ (approvals or [])|length }}</span></h2>
+        <form method="post" action="{{ url_for('propose_skills') }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" class="ghost small">{{ _('Propose skill activations') }}</button></form></div>
+      {% if approvals %}
+      <div class="scroll-box"><table><thead><tr><th>{{ _('Action') }}</th><th>{{ _('Target') }}</th><th>{{ _('Parameters') }}</th><th>{{ _('Decision') }}</th></tr></thead>
+        <tbody>{% for a in approvals %}<tr><td><strong>{{ a.action }}</strong></td><td><code>{{ a.target }}</code></td><td class="small">{% if a.action == 'activate_skill' and a.skill %}<strong>{{ _(a.skill.objective or '') }}</strong><p>{{ _(a.skill.summary or '') }}</p>{% else %}{{ a.parameters|tojson }}{% endif %}</td>
+          <td><form method="post" action="{{ url_for('approval_decide', approval_id=a.approval_id) }}" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button name="decision" value="approve" class="good small">{{ _('Approve') }}</button>
+            <button name="decision" value="reject" class="ghost small">{{ _('Reject') }}</button></form></td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<p class="empty small"><span class="big">🗂</span>{{ _('No pending approval.') }}</p>{% endif %}
+    </section>
+
+    {# ---- skills : proposée → validation → active #}
+    <section class="panel">
+      <div class="panel-title"><h2>{{ _('Skills') }} <span class="count">{{ (skills or [])|length }}</span></h2></div>
+      <div class="scroll-box"><table><thead><tr><th>{{ _('Skill') }}</th><th>{{ _('Agent') }}</th><th>{{ _('Status') }}</th></tr></thead>
+        <tbody>{% for k in skills or [] %}<tr><td><details><summary><strong>{{ k.skill_id }}</strong> v{{ k.version }} — {{ _(k.objective or '') }}</summary>{% if k.summary %}<p class="small muted">{{ _(k.summary) }}</p>{% endif %}</details></td><td>{{ k.agent_id }}</td>
+          <td><span class="badge {{ 'active' if k.status == 'active' else ('proposed' if k.status in ('proposed', 'validated') else 'plain') }}">{{ _(k.status) }}</span></td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    {# ---- contrôles qualité nommés (pass / corrected / kept_despite) et notes de l'utilisateur #}
+    <section class="panel">
+      <div class="panel-title"><h2>{{ _('Quality checks') }}</h2>{% if ratings %}<span class="chip">👍 <b>{{ ratings.good }}</b> · 👎 <b>{{ ratings.bad }}</b></span>{% endif %}</div>
+      <div class="scroll-box"><table><thead><tr><th>{{ _('Check') }}</th><th>{{ _('Outcome') }}</th><th>{{ _('Count') }}</th></tr></thead>
+        <tbody>{% for c in checks or [] %}<tr><td title="{{ c.origin_case }}"><strong>{{ c.check_id }}</strong></td><td><span class="badge {{ {'pass': 'pass', 'corrected': 'corrected', 'kept_despite': 'failed'}.get(c.outcome, 'plain') }}">{{ _(c.outcome) }}</span></td><td>{{ c.count }}</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    {# ---- sauvegardes et disque (socle 2.0 : backups(), disk_usage()) #}
+    {% if backups is defined or disk is defined %}
+    <section class="panel">
+      <div class="panel-title"><h2>{{ _('Backups and disk') }}</h2></div>
+      {% if backups %}<ul class="list">{% for b in backups[:5] %}<li><span class="badge ok">ok</span><strong>{{ b.name }}</strong><span class="small faint">{{ b.size_kb }} KB</span></li>{% endfor %}</ul>{% endif %}
+      {% if disk %}<dl class="facts mt-12">{% for k, v in disk.items() %}<div><dt>{{ _(k) }}</dt><dd>{{ '%.1f'|format(v / 1e9) }} GB</dd></div>{% endfor %}</dl>{% endif %}
+    </section>
+    {% endif %}
+
+    <section class="panel span-2">
+      <div class="panel-title"><h2>{{ _('Costs (by day)') }}</h2></div>
+      <div class="scroll-box"><table><thead><tr><th>{{ _('Day') }}</th><th>{{ _('Calls') }}</th><th>{{ _('Cost') }}</th></tr></thead>
+        <tbody>{% for c in costs %}<tr><td>{{ c.day }}</td><td>{{ c.calls }}</td><td>${{ '%.4f'|format(c.cost) }}</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+  </div>
+</main>
+</div>
+</body>
+</html>

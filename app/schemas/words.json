@@ -1,0 +1,631 @@
+{
+ "schema_version": "1",
+ "term_kinds": [
+  "keyword",
+  "title",
+  "core_skill",
+  "exclusion"
+ ],
+ "source_statuses": [
+  "succeeded",
+  "partial",
+  "failed",
+  "not_configured",
+  "disabled",
+  "valid_empty_result"
+ ],
+ "offer_statuses": [
+  "new",
+  "expired",
+  "applied",
+  "dismissed"
+ ],
+ "experience_decisions": [
+  "keep",
+  "reject",
+  "review"
+ ],
+ "experience_reasons": {
+  "NO_REQUIREMENT": "No experience requirement found in the full text.",
+  "JUNIOR_SIGNAL": "The text accepts beginners / young graduates.",
+  "YEARS_WITHIN_LIMIT": "Years required are within your rule.",
+  "YEARS_ABOVE_LIMIT": "Years required are clearly above your rule.",
+  "YEARS_BORDERLINE": "Years required are just above your rule: to check.",
+  "EXCLUSION_REDUCES_YEARS": "The offer does not count internships / apprenticeships, which lowers your countable experience.",
+  "CONTRADICTION_JUNIOR_YEARS": "The text says junior / beginner but also asks for several years.",
+  "CONTRADICTION_LABEL_TEXT": "The site's experience label contradicts the description.",
+  "SENIOR_TITLE_NO_YEARS": "Senior wording without a number of years: to check.",
+  "MULTIPLE_YEARS": "Several different numbers of years in the text: to check.",
+  "USER_OVERRIDE": "Decision taken by you.",
+  "UNREADABLE": "The text could not be read by the rules: to check."
+ },
+ "application_statuses": [
+  "ready",
+  "sent",
+  "acknowledged",
+  "info_request",
+  "technical_test",
+  "interview",
+  "rejected",
+  "offer",
+  "withdrawn"
+ ],
+ "elimination_reasons": {
+  "AVOIDED_SECTOR": "Sector you asked to avoid.",
+  "SALARY_BELOW_MIN": "Announced salary below your minimum.",
+  "CONTRACT_EXCLUDED": "Contract type you do not accept.",
+  "LOCATION_OUTSIDE": "Outside your areas (and not remote).",
+  "EXCLUDED_KEYWORD": "Contains a keyword you excluded.",
+  "EXPERIENCE_REJECTED": "Rejected by the experience filter."
+ },
+ "experience_signals": {
+  "senior": [
+   "senior",
+   "sr.",
+   "confirmé",
+   "confirmée",
+   "expérimenté",
+   "expérimentée",
+   "expert",
+   "experte",
+   "lead",
+   "principal",
+   "staff",
+   "manager",
+   "head of",
+   "director",
+   "directeur",
+   "directrice"
+  ],
+  "junior_title": [
+   "junior",
+   "jeune diplômé",
+   "jeune diplome",
+   "débutant",
+   "debutant",
+   "graduate",
+   "entry level",
+   "entry-level",
+   "new grad"
+  ],
+  "junior_text": [
+   "jeune diplômé",
+   "jeunes diplômés",
+   "jeune diplome",
+   "débutant accepté",
+   "débutants acceptés",
+   "debutant accepte",
+   "débutant(e) accepté(e)",
+   "première expérience",
+   "premiere experience",
+   "sortie d'école",
+   "aucune expérience requise",
+   "aucune experience requise",
+   "entry level",
+   "entry-level",
+   "recent graduate",
+   "new grad",
+   "graduate program",
+   "no experience required"
+  ]
+ },
+ "number_words": {
+  "un": 1,
+  "une": 1,
+  "deux": 2,
+  "trois": 3,
+  "quatre": 4,
+  "cinq": 5,
+  "six": 6,
+  "sept": 7,
+  "huit": 8,
+  "neuf": 9,
+  "dix": 10,
+  "one": 1,
+  "two": 2,
+  "three": 3,
+  "four": 4,
+  "five": 5,
+  "seven": 7,
+  "eight": 8,
+  "ten": 10
+ },
+ "contract_labels": {
+  "CDI": [
+   "cdi",
+   "permanent",
+   "full-time",
+   "temps plein"
+  ],
+  "CDD": [
+   "cdd",
+   "fixed-term",
+   "temporary"
+  ],
+  "STAGE": [
+   "stage",
+   "internship",
+   "intern"
+  ],
+  "ALTERNANCE": [
+   "alternance",
+   "apprentissage",
+   "apprenticeship",
+   "contrat pro"
+  ],
+  "FREELANCE": [
+   "freelance",
+   "indépendant",
+   "portage"
+  ],
+  "INTERIM": [
+   "intérim",
+   "interim",
+   "travail temporaire"
+  ]
+ },
+ "title_families": {
+  "data_engineer": [
+   "data engineer",
+   "ingénieur data",
+   "ingénieur données",
+   "big data engineer",
+   "analytics engineer",
+   "ingénieur big data"
+  ],
+  "data_scientist": [
+   "data scientist",
+   "machine learning engineer",
+   "ml engineer",
+   "ingénieur machine learning",
+   "ingénieur ia",
+   "ai engineer",
+   "ingénieur intelligence artificielle"
+  ],
+  "data_analyst": [
+   "data analyst",
+   "analyste de données",
+   "business analyst",
+   "bi analyst",
+   "analyste bi"
+  ],
+  "software_engineer": [
+   "software engineer",
+   "développeur",
+   "developpeur",
+   "ingénieur logiciel",
+   "ingénieur développement",
+   "développeur python",
+   "backend developer",
+   "développeur back-end"
+  ],
+  "devops": [
+   "devops",
+   "ingénieur devops",
+   "sre",
+   "site reliability engineer",
+   "cloud engineer",
+   "ingénieur cloud",
+   "platform engineer"
+  ],
+  "embedded": [
+   "ingénieur systèmes embarqués",
+   "embedded engineer",
+   "ingénieur embarqué",
+   "firmware engineer",
+   "développeur embarqué"
+  ],
+  "cybersecurity": [
+   "ingénieur cybersécurité",
+   "security engineer",
+   "analyste soc",
+   "pentester",
+   "ingénieur sécurité"
+  ]
+ },
+ "skill_lexicon": {
+  "python": [
+   "python",
+   "python3"
+  ],
+  "java": [
+   "java"
+  ],
+  "c++": [
+   "c++",
+   "cpp"
+  ],
+  "c": [
+   "langage c",
+   "c/c++",
+   "en c,",
+   "en c "
+  ],
+  "c#": [
+   "c#",
+   ".net"
+  ],
+  "javascript": [
+   "javascript",
+   "js"
+  ],
+  "typescript": [
+   "typescript"
+  ],
+  "go": [
+   "golang",
+   "langage go"
+  ],
+  "rust": [
+   "rust"
+  ],
+  "scala": [
+   "scala"
+  ],
+  "r": [
+   "langage r",
+   "rstudio"
+  ],
+  "sql": [
+   "sql"
+  ],
+  "postgresql": [
+   "postgresql",
+   "postgres"
+  ],
+  "mysql": [
+   "mysql"
+  ],
+  "mongodb": [
+   "mongodb"
+  ],
+  "nosql": [
+   "nosql"
+  ],
+  "spark": [
+   "spark",
+   "pyspark"
+  ],
+  "kafka": [
+   "kafka"
+  ],
+  "airflow": [
+   "airflow"
+  ],
+  "dbt": [
+   "dbt"
+  ],
+  "hadoop": [
+   "hadoop"
+  ],
+  "pandas": [
+   "pandas"
+  ],
+  "numpy": [
+   "numpy"
+  ],
+  "scikit-learn": [
+   "scikit-learn",
+   "sklearn"
+  ],
+  "pytorch": [
+   "pytorch"
+  ],
+  "tensorflow": [
+   "tensorflow"
+  ],
+  "llm": [
+   "llm",
+   "large language model"
+  ],
+  "nlp": [
+   "nlp",
+   "traitement du langage"
+  ],
+  "computer vision": [
+   "computer vision",
+   "vision par ordinateur"
+  ],
+  "docker": [
+   "docker"
+  ],
+  "kubernetes": [
+   "kubernetes",
+   "k8s"
+  ],
+  "terraform": [
+   "terraform"
+  ],
+  "ansible": [
+   "ansible"
+  ],
+  "linux": [
+   "linux"
+  ],
+  "git": [
+   "git",
+   "github",
+   "gitlab"
+  ],
+  "ci/cd": [
+   "ci/cd",
+   "intégration continue",
+   "jenkins",
+   "github actions",
+   "gitlab ci"
+  ],
+  "aws": [
+   "aws",
+   "amazon web services"
+  ],
+  "azure": [
+   "azure"
+  ],
+  "gcp": [
+   "gcp",
+   "google cloud"
+  ],
+  "react": [
+   "react"
+  ],
+  "vue": [
+   "vue.js",
+   "vuejs"
+  ],
+  "angular": [
+   "angular"
+  ],
+  "node.js": [
+   "node.js",
+   "nodejs"
+  ],
+  "django": [
+   "django"
+  ],
+  "flask": [
+   "flask"
+  ],
+  "fastapi": [
+   "fastapi"
+  ],
+  "power bi": [
+   "power bi",
+   "powerbi"
+  ],
+  "tableau": [
+   "tableau software",
+   "tableau desktop"
+  ],
+  "excel": [
+   "excel"
+  ],
+  "matlab": [
+   "matlab"
+  ],
+  "simulink": [
+   "simulink"
+  ],
+  "stm32": [
+   "stm32"
+  ],
+  "rtos": [
+   "rtos",
+   "freertos"
+  ],
+  "fpga": [
+   "fpga",
+   "vhdl",
+   "verilog"
+  ],
+  "rest api": [
+   "api rest",
+   "rest api",
+   "restful"
+  ],
+  "graphql": [
+   "graphql"
+  ],
+  "microservices": [
+   "microservices",
+   "micro-services"
+  ],
+  "agile": [
+   "agile",
+   "scrum"
+  ],
+  "jira": [
+   "jira"
+  ]
+ },
+ "ui_text": {
+  "fr": {
+   "Home": "Accueil",
+   "Supervision": "Supervision",
+   "Theme": "Thème",
+   "Light": "Clair",
+   "Dark": "Sombre",
+   "Follow the system": "Suivre le système",
+   "local": "local",
+   "Details": "Détails",
+   "Results": "Résultats",
+   "Today's best offers": "Meilleures offres du jour",
+   "Offers to review": "Offres à vérifier",
+   "Run the daily search": "Lancer la recherche du jour",
+   "Launch": "Lancer",
+   "Finds, filters and ranks offers. Nothing is ever sent without you.": "Trouve, filtre et classe les offres. Rien n'est jamais envoyé sans toi.",
+   "offers seen": "offres vues",
+   "kept": "retenues",
+   "to review": "à vérifier",
+   "applications": "candidatures",
+   "Score": "Score",
+   "Title": "Intitulé",
+   "Company": "Entreprise",
+   "Location": "Lieu",
+   "Matched": "Satisfait",
+   "Missing": "Manques",
+   "Reason": "Raison",
+   "Source sentence": "Phrase source",
+   "Decision": "Décision",
+   "Source": "Source",
+   "Sources": "Sources",
+   "Add an offer by hand": "Ajouter une offre à la main",
+   "URL": "Lien",
+   "Contract": "Contrat",
+   "Salary": "Salaire",
+   "Description": "Description",
+   "Add": "Ajouter",
+   "Keep": "Garder",
+   "Reject": "Rejeter",
+   "Approve": "Approuver",
+   "keep": "garder",
+   "reject": "rejeter",
+   "review": "à vérifier",
+   "succeeded": "réussi",
+   "failed": "échoué",
+   "partial": "partiel",
+   "running": "en cours",
+   "pending": "en attente",
+   "skipped": "sauté",
+   "not_run": "non lancé",
+   "healthy": "sain",
+   "degraded": "dégradé",
+   "critical": "critique",
+   "unknown": "inconnu",
+   "disabled": "désactivé",
+   "not_configured": "non configurée",
+   "valid_empty_result": "vide (valide)",
+   "proposed": "proposée",
+   "validated": "validée",
+   "active": "active",
+   "retired": "retirée",
+   "Nothing yet. Fill your profile and run the daily search.": "Rien pour l'instant. Remplis ton profil et lance la recherche du jour.",
+   "No offer to review.": "Aucune offre à vérifier.",
+   "Experience filter": "Filtre d'expérience",
+   "Scoring": "Score",
+   "Components": "Composantes",
+   "Eliminated": "Éliminée",
+   "Seen on": "Vue sur",
+   "Offer": "Offre",
+   "Open the offer": "Ouvrir l'offre",
+   "Last run": "Dernier run",
+   "Agents, runs, costs and decisions waiting for you.": "Agents, runs, coûts et décisions qui t'attendent.",
+   "Runs in progress": "Runs en cours",
+   "Nothing running.": "Rien en cours.",
+   "Agents — Health": "Agents — Santé",
+   "Incidents": "Incidents",
+   "No open incident.": "Aucun incident ouvert.",
+   "Resolved": "Résolu",
+   "Ignore": "Ignorer",
+   "Pending approvals": "Validations en attente",
+   "Propose skill activations": "Proposer les activations de skills",
+   "No pending approval.": "Aucune validation en attente.",
+   "Skills": "Skills",
+   "Skill": "Skill",
+   "Agent": "Agent",
+   "Status": "Statut",
+   "Quality checks": "Contrôles qualité",
+   "Check": "Contrôle",
+   "Outcome": "Résultat",
+   "Count": "Nombre",
+   "Backups and disk": "Sauvegardes et disque",
+   "Costs (by day)": "Coûts (par jour)",
+   "Day": "Jour",
+   "Calls": "Appels",
+   "Cost": "Coût",
+   "Sources queried": "Sources interrogées",
+   "Recent runs": "Runs récents",
+   "Error": "Erreur",
+   "Action": "Action",
+   "Target": "Cible",
+   "Parameters": "Paramètres",
+   "Agents": "Agents",
+   "Cost today": "Coût du jour",
+   "Approvals": "Validations",
+   "waiting for you": "t'attendent",
+   "open": "ouverts",
+   "Run started.": "Run lancé.",
+   "A run is already in progress.": "Un run est déjà en cours.",
+   "Offer added to the inbox.": "Offre ajoutée à la boîte d'entrée.",
+   "Invalid form.": "Formulaire invalide.",
+   "Profile": "Profil",
+   "Candidate years": "Années comptées",
+   "Years required": "Années exigées",
+   "Confidence": "Confiance",
+   "Prepare the application": "Préparer la candidature",
+   "Coming at step 7": "Arrive à l'étape 7",
+   "database": "base",
+   "free": "libre",
+   "runs": "runs",
+   "Chain": "Chaîne",
+   "daily: collect, filter, score": "quotidienne : collecter, filtrer, classer",
+   "rescore: filter and score again": "re-classement : refiltrer et reclasser",
+   "Why": "Pourquoi",
+   "The profile is still the EXAMPLE file: results are illustrative only.": "Le profil est encore le fichier EXEMPLE : les résultats sont illustratifs.",
+   "LinkedIn, Indeed or any site: paste it, it is read at the next run.": "LinkedIn, Indeed ou tout autre site : colle-la, elle sera lue au prochain run.",
+   "The whole description: the experience filter reads all of it.": "La description entière : le filtre d'expérience la lit en totalité.",
+   "Dismiss": "Écarter",
+   "Value": "Valeur",
+   "Weight": "Poids",
+   "Collect": "Collecte",
+   "Application": "Candidature",
+   "First seen in run": "Vue pour la première fois dans le run",
+   "A run is in progress.": "Un run est en cours.",
+   "Not decided yet.": "Pas encore décidé.",
+   "Not scored yet.": "Pas encore classée.",
+   "internships not counted": "stages non comptés",
+   "apprenticeships not counted": "alternances non comptées",
+   "your decision": "ta décision",
+   "skills": "compétences",
+   "level": "niveau",
+   "title": "intitulé",
+   "location": "lieu",
+   "salary": "salaire",
+   "sector": "secteur",
+   "core": "principale",
+   "working": "pratique",
+   "notions": "notions",
+   "No collection yet.": "Aucune collecte pour l'instant.",
+   "Requests": "Requêtes",
+   "Fetched": "Reçues",
+   "New": "Nouvelles",
+   "Merged": "Fusionnées",
+   "Run": "Run",
+   "Summary": "Résumé",
+   "Re-check": "Revérifier",
+   "pass": "réussi",
+   "corrected": "corrigé",
+   "kept_despite": "conservé malgré tout",
+   "No experience requirement found in the full text.": "Aucune exigence d'expérience trouvée dans le texte complet.",
+   "The text accepts beginners / young graduates.": "Le texte accepte les débutants / jeunes diplômés.",
+   "Years required are within your rule.": "Les années exigées respectent ta règle.",
+   "Years required are clearly above your rule.": "Les années exigées dépassent nettement ta règle.",
+   "Years required are just above your rule: to check.": "Les années exigées dépassent de peu ta règle : à vérifier.",
+   "The offer does not count internships / apprenticeships, which lowers your countable experience.": "L'offre ne compte pas les stages / l'alternance, ce qui réduit ton expérience comptable.",
+   "The text says junior / beginner but also asks for several years.": "Le texte dit junior / débutant mais exige aussi plusieurs années.",
+   "The site's experience label contradicts the description.": "L'étiquette d'expérience du site contredit la description.",
+   "Senior wording without a number of years: to check.": "Intitulé senior sans nombre d'années : à vérifier.",
+   "Several different numbers of years in the text: to check.": "Plusieurs nombres d'années différents dans le texte : à vérifier.",
+   "Decision taken by you.": "Décision prise par toi.",
+   "The text could not be read by the rules: to check.": "Le texte n'a pas pu être lu par les règles : à vérifier.",
+   "Sector you asked to avoid.": "Secteur que tu as demandé d'éviter.",
+   "Announced salary below your minimum.": "Salaire annoncé sous ton minimum.",
+   "Contract type you do not accept.": "Type de contrat que tu n'acceptes pas.",
+   "Outside your areas (and not remote).": "Hors de tes zones (et pas en télétravail).",
+   "Contains a keyword you excluded.": "Contient un mot-clé que tu as exclu.",
+   "Rejected by the experience filter.": "Rejetée par le filtre d'expérience."
+  }
+ },
+ "skill_text": {
+  "fr": {
+   "Validate the profile source file and fingerprint it.": "Valider le fichier profil et calculer son empreinte.",
+   "Derive keywords, neighbour job titles, core skills and eliminatory criteria from the profile.": "Déduire du profil les mots-clés, intitulés voisins, compétences principales et critères éliminatoires.",
+   "Query each enabled source and log what was really queried.": "Interroger chaque source activée et journaliser ce qui a vraiment été interrogé.",
+   "Convert every offer to one common format.": "Convertir chaque offre dans un format commun.",
+   "Merge duplicates across aggregators, drop expired and already-processed offers.": "Fusionner les doublons entre agrégateurs, écarter les offres expirées et déjà traitées.",
+   "Extract experience requirements from the full description, with the source sentence.": "Extraire les exigences d'expérience de la description complète, avec la phrase source.",
+   "Decide keep / reject / review with a traceable reason; unclear cases go to review.": "Décider garder / rejeter / à vérifier avec une raison traçable ; les cas flous vont en revue.",
+   "Compute a score from skills, level, location, salary and sector.": "Calculer un score à partir des compétences, du niveau, du lieu, du salaire et du secteur.",
+   "List the requirements met and the missing ones for each offer.": "Lister les exigences satisfaites et les manques de chaque offre."
+  }
+ }
+}
