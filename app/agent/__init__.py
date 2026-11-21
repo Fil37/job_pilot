@@ -44,7 +44,9 @@ SECRET_ENV = ("FT_CLIENT_ID", "FT_CLIENT_SECRET", "DEEPSEEK_API_KEY", "GITHUB_TO
 
 
 def secrets_in_env() -> list[str]:
-    return [os.environ[k] for k in SECRET_ENV if os.environ.get(k)]
+    """Values to mask in logs. REDACT_MIN_LENGTH (case 2026-11-21: a 1-letter test value turned every 's' of a
+    trace into '***'): values shorter than 8 characters are not real secrets and are not masked."""
+    return [os.environ[k] for k in SECRET_ENV if len(os.environ.get(k) or "") >= 8]
 
 
 def utc_now() -> str:

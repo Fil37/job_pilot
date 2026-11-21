@@ -60,8 +60,18 @@ CATEGORY_TO_STATUS = {"acknowledgement": "acknowledged", "info_request": "info_r
 FREE_MAIL = {"gmail.com", "outlook.com", "hotmail.com", "hotmail.fr", "yahoo.fr", "yahoo.com", "orange.fr", "free.fr",
              "laposte.net", "icloud.com", "live.fr", "sfr.fr"}
 GENERIC_SENDERS = {"greenhouse.io", "lever.co", "workday.com", "myworkday.com", "smartrecruiters.com", "teamtailor.com",
-                   "welcomekit.co", "jobteaser.com", "francetravail.fr", "taleo.net", "successfactors.com", "icims.com",
-                   "recruitee.com", "flatchr.io", "digitalrecruiters.com", "jobaffinity.fr", "hellowork.com"}
+                   "teamtailor-mail.com", "welcomekit.co", "jobteaser.com", "francetravail.fr", "taleo.net",
+                   "successfactors.com", "icims.com", "recruitee.com", "flatchr.io", "digitalrecruiters.com",
+                   "jobaffinity.fr", "hellowork.com", "dayforce.com", "beetween-software.com", "mydjob.fr", "talentsoft.com",
+                   "cornerstoneondemand.com", "softy.pro", "werecruit.io", "jobvite.com", "breezy.hr", "personio.de"}
+# MAIL_UNLINKED_EVIDENCE (real case 2026-11-21: school newsletters "Simulation Entretien", "rendez-vous jeudi" were
+# kept as interviews): a mail linked to no tracked application needs a recruiting sender or these subject words.
+APPLICATION_WORDS = ("candidature", "application", "postul", "votre profil", "recrutement", "your application",
+                     "entretien d'embauche", "offre d'emploi", "job offer", "suite a votre")
+
+
+def is_recruiting_sender(domain: str) -> bool:
+    return any(domain == d or domain.endswith("." + d) for d in GENERIC_SENDERS)
 
 
 class ReadOnlyMailbox:
@@ -103,8 +113,15 @@ def decode_header(value: str | None) -> str:
     if not value:
         return ""
     parts = []
+    # RAW_8BIT_HEADER (test case 2026-11-21: a UTF-8 subject not encoded per RFC 2047 gave 'unknown-8bit' and stopped
+    # the whole inbox run): unknown encodings fall back to UTF-8 with replacement.
     for text, enc in email.header.decode_header(value):
-        parts.append(text.decode(enc or "utf-8", errors="replace") if isinstance(text, bytes) else text)
+        if isinstance(text, bytes):
+            try:
+                text = text.decode(enc or "utf-8", errors="replace")
+            except LookupError:
+                text = text.decode("utf-8", errors="replace")
+        parts.append(text)
     return re.sub(r"\s+", " ", "".join(parts)).strip()
 
 
@@ -180,7 +197,8 @@ class Agent(BaseAgent):
         ctx.store.register_check("MAIL_READ_ONLY", AGENT_ID, "no command other than EXAMINE / SEARCH / FETCH BODY.PEEK",
                                  "rule of the user: the mailbox stays read-only")
         mcfg, cfg = self._mailbox_cfg(ctx), ctx.config["mail"]
-        password = os.environ.get(mcfg.get("password_env", "IMAP_PASSWORD"), "")
+        # APP_PASSWORD_SPACES (real case 2026-11-21): Google shows "abcd efgh ijkl mnop"; the spaces are not part of it
+        password = os.environ.get(mcfg.get("password_env", "IMAP_PASSWORD"), "").replace(" ", "")
         if not mcfg.get("host") or not mcfg.get("user") or not password:
             return envelope(ctx, AGENT_ID, "skipped", warnings=["mailbox not configured: IMAP_PASSWORD missing in .env "
                                                                  "(Google app password), nothing read"])
@@ -215,7 +233,7 @@ class Agent(BaseAgent):
                     continue
                 try:
                     ev = self._one(ctx, msg, body_raw, apps, threads, cfg, event_id)
-                except (ValueError, TypeError, UnicodeError) as exc:
+                except (ValueError, TypeError, UnicodeError, LookupError) as exc:   # one bad mail never stops the run
                     skipped += 1
                     warnings.append(f"mail skipped: {type(exc).__name__}")
                     continue
@@ -229,7 +247,7 @@ class Agent(BaseAgent):
             box.logout()
         with ctx.connect() as c:
             for ev in events:
-                ev["needs_check"] = ev["confidence"] < cfg["min_confidence"] or not ev["application_id"]
+                ev["needs_check"] = ev["confidence"] < cfg["min_confidence"]
                 upsert(c, ctx.rows, "email_events", {k: ev[k] for k in ctx.rows["tables"]["email_events"]["fields"] if k in ev})
                 if ev["application_id"] and ev["category"] in CATEGORY_TO_STATUS and not ev["needs_check"]:
                     cur = c.execute("SELECT status FROM applications WHERE application_id=?", (ev["application_id"],)).fetchone()[0]
@@ -237,7 +255,13 @@ class Agent(BaseAgent):
                     if cur in STATUS_ORDER and STATUS_ORDER.index(new) > STATUS_ORDER.index(cur):
                         c.execute("UPDATE applications SET status=? WHERE application_id=?", (new, ev["application_id"]))
                 label = f"{ev['category']}: {ev['subject'][:80]} ({ev['from_domain']})"
-                if ev["needs_check"]:
+                untracked = not ev["application_id"] and ev["confidence"] >= cfg["min_confidence"]
+                if untracked:
+                    # UNTRACKED_ANSWER: a clear answer to an application sent outside job_pilot
+                    alerts.append({"kind": "immediate" if ev["category"] in IMMEDIATE else "grouped",
+                                   "category": ev["category"], "application_id": None, "ref": ev["event_id"],
+                                   "message": f"Candidature non suivie — {label}"})
+                elif ev["needs_check"]:
                     alerts.append({"kind": "immediate", "category": "to_check", "application_id": ev["application_id"],
                                    "ref": ev["event_id"], "message": f"À vérifier — {label}"})
                 elif ev["category"] in IMMEDIATE:
@@ -284,10 +308,10 @@ class Agent(BaseAgent):
                     app_id, reason = a["application_id"], "domain" if dom_ok else "company/title"
                     break
         category, conf, hits = classify_rules(subject, excerpt, ctx.words["email_rules"])
-        if not app_id and category == "other":
-            return None                       # not about your job search: nothing stored
-        if not app_id and domain not in GENERIC_SENDERS and category in ("acknowledgement", "other"):
-            return None
+        if not app_id:
+            evidence = is_recruiting_sender(domain) or any(w in fold(subject) for w in APPLICATION_WORDS)
+            if category == "other" or not evidence:
+                return None                   # not about your job search: nothing stored
         return {"event_id": event_id, "thread_key": sha(thread_ids[0], 16) if thread_ids and thread_ids[0] else None,
                 "from_address": address, "from_domain": domain, "subject": subject[:300],
                 "received_at": received.astimezone(timezone.utc).isoformat(timespec="seconds"), "application_id": app_id,

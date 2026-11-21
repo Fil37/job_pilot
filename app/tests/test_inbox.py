@@ -171,6 +171,21 @@ def test_silent_application_gets_a_followup_draft_never_sent():
     assert c.execute("SELECT status FROM followup_drafts").fetchone()[0] == "validated"
 
 
+def test_newsletters_dropped_and_untracked_answers_kept():
+    """Incident 2026-11-21 (first real read, checks MAIL_UNLINKED_EVIDENCE / UNTRACKED_ANSWER): a school newsletter
+    'Atelier Simulation Entretien' was kept as an interview; a rejection from Smile (Teamtailor) for an application
+    sent outside job_pilot flooded the 'to check' alerts. Expected: newsletter not stored; rejection stored, not
+    'to check', grouped alert 'Candidature non suivie'."""
+    msgs = [mail("Ecole <news@efrei.fr>", "RAPPEL Atelier Entrainement Simulation Entretien", "Rendez-vous jeudi pour "
+                 "simuler un entretien.", "n1@efrei.fr"),
+            mail("Smile <noreply@smilegroup.teamtailor-mail.com>", "Smile : suite à votre candidature", "Merci pour votre "
+                 "candidature. Malheureusement, nous ne pourrons pas y donner suite.", "s1@teamtailor")]
+    orch, r, fake, c = run_inbox(msgs)
+    rows = c.execute("SELECT from_domain, category, needs_check, application_id FROM email_events").fetchall()
+    assert rows == [("smilegroup.teamtailor-mail.com", "rejection", 0, None)]
+    assert c.execute("SELECT kind, message LIKE 'Candidature non suivie%' FROM alerts WHERE ref LIKE 'e_%'").fetchall() == [("grouped", 1)]
+
+
 def test_inbox_without_password_is_skipped_not_an_incident():
     """Case: IMAP_PASSWORD not set yet → agent009 'skipped' with the reason, no incident every 15 minutes."""
     with env_vars(IMAP_PASSWORD=None):
