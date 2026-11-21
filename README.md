@@ -39,16 +39,20 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | agent010_followup_coach | fiche d'entretien, brouillon de relance | étape 8 |
 | agent011_pipeline_analyst | statistiques, proposition de pondérations (validation) | étape 9 |
 
-## Sources et conditions d'utilisation
+## Sources et conditions d'utilisation (vérifiées le 2026-11-21)
 
 | Source | Accès | État |
 |---|---|---|
-| France Travail | API officielle (`FT_CLIENT_ID` / `FT_CLIENT_SECRET` dans `.env`) | prête, à configurer |
-| Offres collées à la main | formulaire de l'accueil (LinkedIn, Indeed, tout site) | prête |
-| Greenhouse, Lever | API publiques de job boards, entreprises de `criteria.target_companies` | prêtes |
-| HelloWork, Welcome to the Jungle, APEC | conditions non vérifiées | désactivées |
-| JobTeaser | derrière une connexion école | désactivée (alertes e-mail) |
-| Alertes LinkedIn / Indeed | lues dans ta boîte par agent009 | étape 8 |
+| France Travail (pages publiques) | pages métier × département des plans du site officiels ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; extraits seulement | active |
+| France Travail (API) | fermée aux nouvelles applications depuis 2026-10 (data.gouv.fr) ; tes identifiants n'obtiennent que le droit « application » | désactivée |
+| Offres collées à la main | formulaire de l'accueil (LinkedIn, Indeed, tout site) | active |
+| Greenhouse, Lever | API publiques de job boards des entreprises cibles (Alice & Bob) | active |
+| HelloWork | CGU 8.2 : scraping « strictement interdit, commerciales ou non » | jamais (alertes e-mail) |
+| Welcome to the Jungle | CGU : robots / extraction automatisée interdits | jamais (alertes e-mail) |
+| Meteojob | CGU : extraction des bases de données interdite | jamais (alertes e-mail) |
+| APEC | protection anti-robot (même `robots.txt` en 403) : jamais contournée | jamais (alertes e-mail) |
+| JobTeaser | derrière une connexion école | jamais (alertes e-mail) |
+| LinkedIn, Indeed | CGU : accès automatisé interdit ; pas de session ni de cookies réutilisés | alertes e-mail (étape 8) |
 
 Le journal des sources réellement interrogées est sur la page Supervision.
 

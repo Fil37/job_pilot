@@ -130,5 +130,26 @@ def test_overrides_only_on_overridable_keys():
         pass
 
 
+def test_new_optional_field_is_added_to_an_existing_database():
+    """Case 2026-11-21: offers.description_complete added to rows.json while job_pilot.db already existed."""
+    import sqlite3
+    import tempfile
+    from app.agent import ensure_business_tables
+    db = Path(tempfile.mkdtemp()) / "old.db"
+    old = copy.deepcopy(SCHEMAS["rows"])
+    del old["tables"]["offers"]["fields"]["description_complete"]
+    ensure_business_tables(db, old)
+    ensure_business_tables(db, SCHEMAS["rows"])
+    cols = {r[1] for r in sqlite3.connect(db).execute("PRAGMA table_info(offers)")}
+    assert "description_complete" in cols
+    bad = copy.deepcopy(SCHEMAS["rows"])
+    bad["tables"]["offers"]["fields"]["new_required"] = {"type": "text", "required": True}
+    try:
+        ensure_business_tables(db, bad)
+        raise AssertionError("accepted")
+    except ConfigError:
+        pass
+
+
 if __name__ == "__main__":
     run_main(globals())

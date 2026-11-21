@@ -7,11 +7,12 @@
   "exclusion"
  ],
  "source_statuses": [
-  "succeeded",
-  "partial",
+  "disabled",
   "failed",
   "not_configured",
-  "disabled",
+  "partial",
+  "robots_blocked",
+  "succeeded",
   "valid_empty_result"
  ],
  "offer_statuses": [
@@ -37,7 +38,8 @@
   "SENIOR_TITLE_NO_YEARS": "Senior wording without a number of years: to check.",
   "MULTIPLE_YEARS": "Several different numbers of years in the text: to check.",
   "USER_OVERRIDE": "Decision taken by you.",
-  "UNREADABLE": "The text could not be read by the rules: to check."
+  "UNREADABLE": "The text could not be read by the rules: to check.",
+  "PARTIAL_DESCRIPTION": "Only an excerpt is available (full text on the source site): open the offer to check."
  },
  "application_statuses": [
   "ready",
@@ -803,7 +805,8 @@
    "Application marked as sent.": "Candidature marquée comme envoyée.",
    "with a cover letter": "avec lettre de motivation",
    "Did you send this application yourself?": "As-tu envoyé cette candidature toi-même ?",
-   "applied": "candidaté"
+   "applied": "candidaté",
+   "Only an excerpt is available (full text on the source site): open the offer to check.": "Seul un extrait est disponible (texte complet sur le site d'origine) : ouvre l'offre pour vérifier."
   }
  },
  "skill_text": {

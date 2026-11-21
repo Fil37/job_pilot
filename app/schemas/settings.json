@@ -114,10 +114,27 @@
   },
   "sources": {
    "france_travail": {
-    "enabled": true,
+    "enabled": false,
     "kind": "api",
-    "tos_status": "official_api",
-    "note": "Official API (francetravail.io). Needs FT_CLIENT_ID and FT_CLIENT_SECRET in .env."
+    "tos_status": "api_closed_to_new_applications",
+    "note": "Official API: closed to new applications since 2026-10 (data.gouv.fr); your credentials only get the 'application' scope (tested 2026-11-21). Re-enable if France Travail grants access."
+   },
+   "france_travail_web": {
+    "enabled": true,
+    "kind": "public_pages",
+    "tos_status": "robots_allowed_pages",
+    "checked_on": "2026-11-21",
+    "max_requests": 70,
+    "rules": "CGU francetravail.fr: no clause against automated reading of offers (offers reusable through the API licence). robots.txt candidat.francetravail.fr: keyword search (*motsCles=*) forbidden, métier / département pages and offer pages allowed. Read: métier pages listed in the official sitemaps only, robots.txt checked before every request, 1 request/s, no login, no cookie.",
+    "metier_must_contain_any": [
+     "ingenieur",
+     "developpeur",
+     "concepteur"
+    ],
+    "metier_exclude": [
+     "commercial"
+    ],
+    "note": "Excerpts only (the full text is often on the partner site): offers without a clear requirement go to review."
    },
    "manual": {
     "enabled": true,
@@ -140,20 +157,23 @@
    "hellowork": {
     "enabled": false,
     "kind": "site",
-    "tos_status": "unverified",
-    "note": "Disabled until its terms are checked; e-mail alerts otherwise."
+    "tos_status": "scraping_forbidden",
+    "note": "CGU 8.2: automated extraction 'strictement interdite, à quelques fins que ce soit, commerciales ou non'. Never enable; e-mail alerts only.",
+    "checked_on": "2026-11-21"
    },
    "welcome_to_the_jungle": {
     "enabled": false,
     "kind": "site",
-    "tos_status": "unverified",
-    "note": "Disabled until its terms are checked; e-mail alerts otherwise."
+    "tos_status": "scraping_forbidden",
+    "note": "CGU: robots / automated extraction ('scraping') forbidden. Never enable; e-mail alerts only.",
+    "checked_on": "2026-11-21"
    },
    "apec": {
     "enabled": false,
     "kind": "site",
-    "tos_status": "unverified",
-    "note": "Disabled until its terms are checked; e-mail alerts otherwise."
+    "tos_status": "bot_protection",
+    "note": "Anti-bot protection (even robots.txt answers 403): never bypassed. E-mail alerts only.",
+    "checked_on": "2026-11-21"
    },
    "jobteaser": {
     "enabled": false,
@@ -172,6 +192,13 @@
     "kind": "mail_alert",
     "tos_status": "mail_alert",
     "note": "Read from your mailbox by agent009 (step 8)."
+   },
+   "meteojob": {
+    "enabled": false,
+    "kind": "site",
+    "tos_status": "extraction_forbidden",
+    "checked_on": "2026-11-21",
+    "note": "CGU: forbids to 'utiliser ou extraire en tout ou en partie les bases de données utilisées par le Site'. Never enable; e-mail alerts only."
    }
   },
   "http": {

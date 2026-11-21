@@ -25,3 +25,4 @@ tests:
   - test_company_facts_are_not_requirements
   - test_real_case_datadog_staff_engineer
   - test_preferred_years_and_two_different_requirements
+  - test_excerpt_without_requirement_goes_to_review

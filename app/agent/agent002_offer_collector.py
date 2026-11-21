@@ -55,6 +55,8 @@ AGENT_ID = "agent002"
 CHECKS = [
     ("OFFER_MANDATORY_FIELDS", "an offer without title, company, description or link is dropped and counted",
      "rule of the method: an offer that cannot be judged is never stored half-empty"),
+    ("ROBOTS_ALLOWED", "a path forbidden by the site's robots.txt is never requested",
+     "2026-11-21: France Travail forbids keyword search (*motsCles=*) to robots; HelloWork, Meteojob, WTTJ forbid scraping"),
     ("SOURCE_INTERNAL_DUPLICATES", "one offer per external id inside a source",
      "2026-11-21 test: France Travail returns the same offer for several title queries"),
 ]
@@ -314,8 +316,131 @@ def fetch_lever(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], i
     return out, q
 
 
-FETCHERS = {"manual": fetch_manual, "france_travail": fetch_france_travail, "greenhouse": fetch_greenhouse,
-            "lever": fetch_lever}
+# --------------------------------------------------------------------------- France Travail public pages
+FT_WEB = "https://candidat.francetravail.fr"
+
+
+def robots_rules(text: str) -> list[tuple[str, str]]:
+    """(allow|disallow, pattern) of the 'User-agent: *' group."""
+    rules, active = [], False
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if ":" not in line:
+            continue
+        key, value = (x.strip() for x in line.split(":", 1))
+        key = key.lower()
+        if key == "user-agent":
+            active = value == "*"
+        elif active and key in ("allow", "disallow") and value:
+            rules.append((key, value))
+    return rules
+
+
+def robots_allowed(rules: list[tuple[str, str]], path: str) -> bool:
+    """Longest matching rule wins (RFC 9309), '*' wildcard and '$' end anchor supported."""
+    best, verdict = -1, True
+    for kind, pattern in rules:
+        rx = re.escape(pattern).replace(r"\*", ".*")
+        rx = rx[:-2] + "$" if rx.endswith(r"\$") else rx
+        if re.match(rx, path) and len(pattern) > best:
+            best, verdict = len(pattern), kind == "allow"
+    return verdict
+
+
+def parse_ft_listing(page: str, words: dict, now=None) -> list[dict]:
+    """Offers of a France Travail métier page: id, title, company, location, excerpt, contract, date, origin."""
+    from datetime import timedelta
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for m in re.finditer(r'<li data-id-offre="([A-Z0-9]+)" class="result">(.*?)</li>', page, re.S):
+        oid, block = m.group(1), m.group(2)
+        def text(rx):
+            x = re.search(rx, block, re.S)
+            return html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", x.group(1)))).strip() if x else ""
+        title = text(r'class="media-heading-title">(.*?)</span>')
+        sub = text(r'<p translate="no" class="subtext">(.*?)</p>')
+        # FT_NO_COMPANY (real case 2026-11-21: "92 - Boulogne-Billancourt" without employer gave company "92")
+        if re.match(r"^(\d{2,3}|2[AB])\s*-", sub):
+            company, location = "", sub
+        else:
+            company, _, location = sub.partition(" - ")
+        excerpt = text(r'<p class="description">(.*?)</p>')
+        contract = text(r'<p class="contrat">(.*?)<span')
+        origin = text(r'alt="Origine de l\'offre : ([^"]*)"')
+        date_txt = fold(text(r'<p class="date">(.*?)</p>'))
+        days = 0 if "aujourd" in date_txt else 1 if "hier" in date_txt else None
+        dm = re.search(r"il y a (\d+) jour", date_txt)
+        if dm:
+            days = int(dm.group(1))
+        published = (now - timedelta(days=days)).date().isoformat() if days is not None else None
+        o = make_offer(words, source_id="france_travail_web", external_id=oid, title=title,
+                       company=company.strip() or "Entreprise non communiquée", url=f"{FT_WEB}/offres/recherche/detail/{oid}",
+                       description=excerpt, location=location.strip() or None, contract=contract, published_at=published,
+                       label_experience=None)
+        if o:
+            o["description_complete"] = False
+            o["_origin"] = origin
+        out.append(o)
+    return out
+
+
+def fetch_france_travail_web(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:
+    spec = ctx.config["sources"]["france_travail_web"]
+    http.left = min(http.left, spec.get("max_requests", http.left)) if spec.get("max_requests") else http.left
+    status, robots = http.request("GET", f"{FT_WEB}/robots.txt", headers={"Accept": "text/plain"})
+    if status != 200:
+        raise SourceError("source_unavailable", f"robots.txt HTTP {status}: nothing read")
+    rules = robots_rules(robots)
+    blocked = []
+
+    def get(path):
+        if not robots_allowed(rules, path):                      # ROBOTS_ALLOWED: never requested
+            blocked.append(path)
+            return None
+        st, body = http.request("GET", FT_WEB + path, headers={"Accept": "text/html,application/xml"})
+        return body if st == 200 else None
+
+    tokens = domain_tokens(terms["title"])
+    must, exclude = set(spec.get("metier_must_contain_any", [])), set(spec.get("metier_exclude", []))
+    sm = get("/rechercheoffre/sitemap/secteurs-metiers.xml") or ""
+    national = {}
+    for u in re.findall(r"<loc>([^<]+)</loc>", sm):
+        mm = re.match(re.escape(FT_WEB) + r"(/offres/emploi/([a-z0-9-]+)/(s\d+m\d+))$", u)
+        if not mm:
+            continue
+        words = {w.rstrip("s") for w in mm.group(2).split("-")}
+        if words & tokens and (not must or words & must) and not words & exclude:
+            national.setdefault(mm.group(2), []).append(mm.group(1))
+    if not national:
+        raise SourceError("missing_data", "no France Travail métier page matches your titles")
+    depts = sorted({k for z in ctx.instance["criteria"].get("zones", []) for k in z.get("keywords", [])
+                    if re.fullmatch(r"\d{2}", k)})
+    paths = [p for ps in national.values() for p in ps]
+    if depts:
+        cross = get("/rechercheoffre/sitemap/croisements-metiers-departements.xml") or ""
+        firsts = {slug: ps[0].rsplit("/", 1)[1] for slug, ps in national.items()}
+        for u in re.findall(r"<loc>([^<]+)</loc>", cross):
+            mm = re.match(re.escape(FT_WEB) + r"(/offres/emploi/([a-z0-9-]+)/[a-z0-9-]+/(s\d+m\d+)d(\d{2}))$", u)
+            if mm and firsts.get(mm.group(2)) == mm.group(3) and mm.group(4) in depts:
+                paths.append(mm.group(1))
+    out = []
+    for path in paths:
+        if http.left <= 0:
+            break
+        page = get(path)
+        if page:
+            out += [o for o in parse_ft_listing(page, ctx.words) if o is None or _title_wanted(o["title"], terms)]
+    if blocked:
+        ctx.store.record_outcomes(ctx.run_id, [{"check": "ROBOTS_ALLOWED", "outcome": "corrected",
+                                                "detail": f"{len(blocked)} path(s) not requested: {blocked[:3]}"}])
+    else:
+        ctx.store.record_outcomes(ctx.run_id, [{"check": "ROBOTS_ALLOWED", "outcome": "pass",
+                                                "detail": f"{http.count} request(s), all allowed"}])
+    return out, len(paths)
+
+
+FETCHERS = {"manual": fetch_manual, "france_travail": fetch_france_travail, "france_travail_web": fetch_france_travail_web,
+            "greenhouse": fetch_greenhouse, "lever": fetch_lever}
 
 
 # =========================================================================== agent

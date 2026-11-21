@@ -178,6 +178,12 @@ def decide(x: dict, months: dict, rule: dict, exp_cfg: dict) -> dict:
         return res("keep", "JUNIOR_SIGNAL", f"'{x['junior']}' in the text", None, 0.85)
     if x["senior"]:
         return res("review", "SENIOR_TITLE_NO_YEARS", f"'{x['senior'].strip()}' in the title, no number of years", None, 0.5)
+    if x.get("partial"):
+        # PARTIAL_DESCRIPTION (France Travail listing pages, 2026-11-21): an excerpt without any requirement says
+        # nothing about the full text, so the offer goes to review, never to "keep" by default.
+        return res("review", "PARTIAL_DESCRIPTION", "excerpt only, no experience information in it", None, 0.4)
+    if x["senior"]:
+        return res("review", "SENIOR_TITLE_NO_YEARS", f"'{x['senior'].strip()}' in the title, no number of years", None, 0.5)
     return res("keep", "NO_REQUIREMENT", "no experience requirement found in the full text", None, 0.7)
 
 
@@ -217,9 +223,11 @@ class Agent(BaseAgent):
         with ctx.connect() as c:
             for sub in subtasks:
                 for oid in sub["offer_ids"]:
-                    o = c.execute("SELECT title, description, label_experience FROM offers WHERE offer_id=?", (oid,)).fetchone()
+                    o = c.execute("SELECT title, description, label_experience, description_complete FROM offers "
+                                  "WHERE offer_id=?", (oid,)).fetchone()
                     try:
                         x = extract(o["description"], o["title"], o["label_experience"], ctx.words)
+                        x["partial"] = o["description_complete"] == 0
                         d = decide(x, months, rule, ctx.config["experience"])
                     except Exception as exc:  # noqa: BLE001 - an unparsable offer goes to review, never to the bin
                         x = {"excludes_internship": False, "excludes_apprenticeship": False, "junior": None, "senior": None}

@@ -95,5 +95,19 @@ def test_preferred_years_and_two_different_requirements():
     assert judge("2 ans d'expérience en Python. 5 ans d'expérience en gestion de projet.")[:2] == ("review", "MULTIPLE_YEARS")
 
 
+def test_excerpt_without_requirement_goes_to_review():
+    """Case 2026-11-21 (France Travail listing pages, check PARTIAL_DESCRIPTION): an excerpt without years is not a
+    'no requirement'; a senior title is reported as such; years or junior wording in the excerpt still decide."""
+    def partial(desc, title="Ingénieur FPGA (H/F)"):
+        x = extract(desc, title, None, W)
+        x["partial"] = True
+        d = decide(x, MONTHS, RULE, EXP)
+        return d["decision"], d["reason_code"]
+    assert partial("Conception FPGA en VHDL pour l'aéronautique...") == ("review", "PARTIAL_DESCRIPTION")
+    assert partial("Conception FPGA...", title="Ingénieur Fpga Expérimenté H/F") == ("review", "SENIOR_TITLE_NO_YEARS")
+    assert partial("Poste ouvert aux jeunes diplômés...") == ("keep", "JUNIOR_SIGNAL")
+    assert partial("Vous avez 8 ans d'expérience en FPGA...") == ("reject", "YEARS_ABOVE_LIMIT")
+
+
 if __name__ == "__main__":
     run_main(globals())

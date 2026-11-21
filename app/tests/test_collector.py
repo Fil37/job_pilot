@@ -94,7 +94,7 @@ def test_missing_credentials_is_not_configured_and_a_failing_source_gives_partia
         tmp = Path(tempfile.mkdtemp())
         from conftest import make_instance
         inst = make_instance(tmp, target_companies=TARGETS)
-        inst["overrides"] = {"sources": {"manual": {"enabled": False}}}
+        inst["overrides"]["sources"]["manual"] = {"enabled": False}
         orch2 = make_orch(tmp, transport=web2, instance=inst)
         r2 = orch2.run(None, only=["agent001", "agent002"])
     assert r2["status"] == "failed"
@@ -108,6 +108,89 @@ def test_title_domain_words_are_enough():
     assert _title_wanted("Electronics Integration Engineer", terms)
     assert _title_wanted("Ingénieur logiciel embarqué (H/F)", terms) and _title_wanted("FPGA Design Engineer", terms)
     assert not _title_wanted("Office Manager", terms) and not _title_wanted("Software Engineer", terms)
+
+
+FT_ROBOTS = """User-agent: *
+Disallow: /espacepersonnel/
+Disallow: *motsCles=*
+Disallow: /offres/recherchesenregistrees
+Disallow: *JSESSIONID*
+"""
+FT_ITEM = ('<li data-id-offre="{id}" class="result"><a href="/offres/recherche/detail/{id}"><img alt="Origine de l\'offre : '
+           'France Travail"/><h2 class="t4 media-heading"><span class="media-heading-title">{title}</span></h2>'
+           '<p translate="no" class="subtext">\n{sub}</p><p class="description">{desc}</p><p class="contrat">CDI'
+           '<span class="type-contrat">Temps plein</span></p><p class="date">\nPublié il y a 3 jours\n</p></a></li>')
+
+
+def ft_page(*items):
+    return "<ul>" + "".join(FT_ITEM.format(**i) for i in items) + "</ul>"
+
+
+def test_robots_rules_of_france_travail_are_respected():
+    """Case 2026-11-21 (check ROBOTS_ALLOWED): France Travail forbids keyword search to robots; métier pages allowed."""
+    from app.agent.agent002_offer_collector import robots_allowed, robots_rules
+    rules = robots_rules(FT_ROBOTS)
+    assert robots_allowed(rules, "/offres/emploi/ingenieur-electronicien/s13m6")
+    assert robots_allowed(rules, "/rechercheoffre/sitemap/secteurs-metiers.xml")
+    assert not robots_allowed(rules, "/offres/recherche?motsCles=fpga&lieux=75")
+    assert not robots_allowed(rules, "/espacepersonnel/x") and not robots_allowed(rules, "/a;JSESSIONID=1")
+    assert robots_allowed(robots_rules("User-agent: *\nDisallow: /*?\nAllow: /jobs?*"), "/jobs?q=1")
+
+
+def test_france_travail_listing_is_parsed_including_offers_without_employer():
+    """Incident 2026-11-21 (check FT_NO_COMPANY): '92 - Boulogne-Billancourt' without employer gave company '92'."""
+    from app.agent.agent002_offer_collector import parse_ft_listing
+    page = ft_page({"id": "216HQRB", "title": "Ingénieur FPGA (H/F)", "sub": "ELSYS Design - <span>94 - Cachan</span>",
+                    "desc": "Conception FPGA en VHDL..."},
+                   {"id": "216AAAA", "title": "Ingénieur électronique (H/F)", "sub": "<span>92 - Boulogne-Billancourt</span>",
+                    "desc": "Cartes électroniques..."})
+    a, b = parse_ft_listing(page, W)
+    assert (a["external_id"], a["company"], a["location"], a["contract"]) == ("216HQRB", "ELSYS Design", "94 - Cachan", "CDI")
+    assert a["description_complete"] is False and a["url"].endswith("/offres/recherche/detail/216HQRB")
+    assert a["published_at"] is not None
+    assert (b["company"], b["location"]) == ("Entreprise non communiquée", "92 - Boulogne-Billancourt")
+
+
+def test_france_travail_pages_source_reads_only_allowed_pages():
+    """Case: the connector reads robots.txt first, then the sitemaps and the métier pages of your titles (national +
+    your départements); keyword search is never requested; titles outside your search are not kept."""
+    import tempfile
+    from conftest import make_instance
+    sm = ("<urlset><loc>https://candidat.francetravail.fr/offres/emploi/ingenieur-electronicien/s13m6</loc>"
+          "<loc>https://candidat.francetravail.fr/offres/emploi/boulanger/s1m1</loc>"
+          "<loc>https://candidat.francetravail.fr/offres/emploi/ingenieur-technico-commercial-en-electronique/s18m10</loc></urlset>")
+    cross = ("<urlset><loc>https://candidat.francetravail.fr/offres/emploi/ingenieur-electronicien/essonne/s13m6d91</loc>"
+             "<loc>https://candidat.francetravail.fr/offres/emploi/ingenieur-electronicien/rhone/s13m6d69</loc></urlset>")
+    calls = []
+
+    def web(method, url, headers, data, timeout):
+        calls.append(url)
+        if url.endswith("/robots.txt"):
+            return 200, FT_ROBOTS
+        if url.endswith("secteurs-metiers.xml"):
+            return 200, sm
+        if url.endswith("croisements-metiers-departements.xml"):
+            return 200, cross
+        if url.endswith("/s13m6") or url.endswith("/s13m6d91"):
+            return 200, ft_page({"id": "216" + url[-4:].upper().replace("/", "X"), "title": "Ingénieur électronicien (H/F)",
+                                 "sub": "ACME - <span>91 - Orsay</span>", "desc": "Électronique embarquée..."},
+                                {"id": "217" + url[-4:].upper().replace("/", "X"), "title": "Office Manager",
+                                 "sub": "ACME - <span>91 - Orsay</span>", "desc": "Gestion..."})
+        return 404, ""
+    tmp = Path(tempfile.mkdtemp())
+    inst = make_instance(tmp, roles=["ingénieur électronique"], title_families=["electronics"],
+                         zones=[{"label": "Essonne", "keywords": ["essonne", "91"]}])
+    inst["overrides"] = {"sources": {"manual": {"enabled": False}, "greenhouse": {"enabled": False},
+                                     "lever": {"enabled": False}, "france_travail": {"enabled": False},
+                                     "france_travail_web": {"enabled": True}}}
+    orch = make_orch(tmp, transport=web, instance=inst)
+    r = orch.run(None, only=["agent001", "agent002"])
+    # the same job on the national page and on the Essonne page: stored once, the second one merged as an alias
+    assert (r["results"]["agent002"]["new"], r["results"]["agent002"]["merged"]) == (1, 1), r["results"]["agent002"]
+    assert calls[0].endswith("/robots.txt") and not any("motsCles" in u for u in calls)
+    assert not any("boulanger" in u or "technico" in u or "rhone" in u for u in calls)
+    titles = [t for (t,) in sqlite3.connect(orch.db_path).execute("SELECT title FROM offers")]
+    assert titles == ["Ingénieur électronicien (H/F)"]
 
 
 if __name__ == "__main__":

@@ -38,6 +38,10 @@ def make_instance(tmp: Path, **criteria) -> dict:
         prof.write_text(EXAMPLE_PROFILE.read_text(encoding="utf-8"), encoding="utf-8")
     inst["profile_path"] = str(prof)
     inst["criteria"].update(criteria)
+    # The tests of the API flow keep the France Travail API on and the public-pages source off (their fake web does
+    # not serve robots.txt). Expectation updated on 2026-11-21: the settings now ship the API off (closed to new
+    # applications) and france_travail_web on; test_france_travail_pages_source_* covers that source.
+    inst["overrides"] = {"sources": {"france_travail": {"enabled": True}, "france_travail_web": {"enabled": False}}}
     return inst
 
 

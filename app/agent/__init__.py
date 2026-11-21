@@ -174,6 +174,13 @@ def ensure_business_tables(db_path: str | Path, rows: dict) -> None:
             for u in t.get("unique", []):
                 cols.append(f"UNIQUE ({', '.join(u)})")
             c.execute(f"CREATE TABLE IF NOT EXISTS {tname} ({', '.join(cols)})")
+            # schema evolution: a new OPTIONAL field of rows.json is added to an existing table (never dropped)
+            have = {r[1] for r in c.execute(f"PRAGMA table_info({tname})")}
+            for fname, spec in t["fields"].items():
+                if fname not in have:
+                    if spec.get("required"):
+                        raise ConfigError(f"rows.json: new required field {tname}.{fname} needs a migration")
+                    c.execute(f"ALTER TABLE {tname} ADD COLUMN {fname} {SQL_TYPES[spec['type']]}")
     if str(db_path) != ":memory:" and Path(db_path).exists():
         os.chmod(db_path, 0o600)
 
