@@ -210,10 +210,16 @@
   ],
   "embedded": [
    "ingénieur systèmes embarqués",
+   "ingénieur système embarqué",
    "embedded engineer",
+   "embedded software engineer",
    "ingénieur embarqué",
+   "ingénieur logiciel embarqué",
+   "développeur embarqué",
+   "développeur logiciel embarqué",
    "firmware engineer",
-   "développeur embarqué"
+   "ingénieur firmware",
+   "ingénieur développement embarqué"
   ],
   "cybersecurity": [
    "ingénieur cybersécurité",
@@ -221,6 +227,26 @@
    "analyste soc",
    "pentester",
    "ingénieur sécurité"
+  ],
+  "fpga": [
+   "ingénieur fpga",
+   "fpga engineer",
+   "ingénieur conception fpga",
+   "ingénieur vhdl",
+   "digital design engineer",
+   "concepteur fpga",
+   "ingénieur conception numérique"
+  ],
+  "electronics": [
+   "ingénieur électronique",
+   "electronics engineer",
+   "ingénieur hardware",
+   "hardware engineer",
+   "ingénieur conception électronique",
+   "ingénieur électronicien",
+   "ingénieur essais",
+   "ingénieur validation",
+   "ingénieur test et validation"
   ]
  },
  "skill_lexicon": {
@@ -414,8 +440,8 @@
   ],
   "fpga": [
    "fpga",
-   "vhdl",
-   "verilog"
+   "soc fpga",
+   "fpga/soc"
   ],
   "rest api": [
    "api rest",
@@ -435,6 +461,157 @@
   ],
   "jira": [
    "jira"
+  ],
+  "vhdl": [
+   "vhdl"
+  ],
+  "verilog": [
+   "verilog",
+   "systemverilog"
+  ],
+  "nios ii": [
+   "nios ii",
+   "nios2"
+  ],
+  "quartus": [
+   "quartus"
+  ],
+  "vivado": [
+   "vivado"
+  ],
+  "modelsim": [
+   "modelsim",
+   "questasim"
+  ],
+  "altium": [
+   "altium"
+  ],
+  "kicad": [
+   "kicad"
+  ],
+  "bare-metal": [
+   "bare-metal",
+   "bare metal"
+  ],
+  "embedded linux": [
+   "linux embarque",
+   "embedded linux",
+   "yocto",
+   "buildroot"
+  ],
+  "esp32": [
+   "esp32"
+  ],
+  "arduino": [
+   "arduino"
+  ],
+  "i.mx93": [
+   "i.mx93",
+   "imx93",
+   "i.mx 93",
+   "i.mx"
+  ],
+  "lpc55s69": [
+   "lpc55s69",
+   "lpc55"
+  ],
+  "microcontrollers": [
+   "microcontroleur",
+   "microcontroleurs",
+   "microcontroller",
+   "microcontrollers",
+   "mcu"
+  ],
+  "can": [
+   "bus can",
+   "can bus",
+   "protocole can",
+   "can-bus",
+   "canopen",
+   "can fd"
+  ],
+  "spi": [
+   "spi"
+  ],
+  "i2c": [
+   "i2c",
+   "i²c"
+  ],
+  "uart": [
+   "uart",
+   "rs232",
+   "rs-232"
+  ],
+  "tcp/ip": [
+   "tcp/ip",
+   "tcp-ip"
+  ],
+  "usb": [
+   "usb"
+  ],
+  "qt": [
+   "qt"
+  ],
+  "mfc": [
+   "mfc"
+  ],
+  "cadence": [
+   "cadence",
+   "virtuoso"
+  ],
+  "vhdl-ams": [
+   "vhdl-ams"
+  ],
+  "mems": [
+   "mems"
+  ],
+  "pid control": [
+   "pid",
+   "regulation pi",
+   "asservissement"
+  ],
+  "motor control": [
+   "commande moteur",
+   "motor control",
+   "bldc"
+  ],
+  "data acquisition": [
+   "acquisition de donnees",
+   "data acquisition"
+  ],
+  "analog conditioning": [
+   "conditionnement analogique",
+   "electronique analogique",
+   "analog design"
+  ],
+  "tests on target": [
+   "essais sur cible",
+   "tests sur cible",
+   "banc de test",
+   "test bench"
+  ],
+  "edge ai": [
+   "edge ai",
+   "ia embarquee",
+   "tinyml",
+   "npu"
+  ],
+  "cortex-m": [
+   "cortex-m",
+   "arm cortex"
+  ],
+  "zephyr": [
+   "zephyr"
+  ],
+  "labview": [
+   "labview"
+  ],
+  "oscilloscope": [
+   "oscilloscope"
+  ],
+  "pcb": [
+   "pcb",
+   "routage"
   ]
  },
  "ui_text": {
@@ -612,7 +789,8 @@
    "Contract type you do not accept.": "Type de contrat que tu n'acceptes pas.",
    "Outside your areas (and not remote).": "Hors de tes zones (et pas en télétravail).",
    "Contains a keyword you excluded.": "Contient un mot-clé que tu as exclu.",
-   "Rejected by the experience filter.": "Rejetée par le filtre d'expérience."
+   "Rejected by the experience filter.": "Rejetée par le filtre d'expérience.",
+   "France (mobility)": "France (mobilité)"
   }
  },
  "skill_text": {
@@ -627,5 +805,51 @@
    "Compute a score from skills, level, location, salary and sector.": "Calculer un score à partir des compétences, du niveau, du lieu, du salaire et du secteur.",
    "List the requirements met and the missing ones for each offer.": "Lister les exigences satisfaites et les manques de chaque offre."
   }
- }
+ },
+ "foreign_locations": [
+  "usa",
+  "united states",
+  "new york",
+  "boston",
+  "san francisco",
+  "california",
+  "texas",
+  "canada",
+  "united kingdom",
+  "uk",
+  "london",
+  "ireland",
+  "dublin",
+  "spain",
+  "madrid",
+  "barcelona",
+  "germany",
+  "berlin",
+  "munich",
+  "italy",
+  "milan",
+  "netherlands",
+  "amsterdam",
+  "belgium",
+  "brussels",
+  "bruxelles",
+  "switzerland",
+  "suisse",
+  "zurich",
+  "geneve",
+  "luxembourg",
+  "portugal",
+  "lisbon",
+  "india",
+  "singapore",
+  "japan",
+  "tokyo",
+  "australia",
+  "sydney",
+  "poland",
+  "warsaw",
+  "israel",
+  "tel aviv",
+  "brazil"
+ ]
 }

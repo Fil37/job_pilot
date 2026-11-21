@@ -66,5 +66,22 @@ def test_terms_titles_neighbours_core_skills_exclusions():
     assert "contract:stage" in by["exclusion"] and "contract:cdi" not in by["exclusion"]
 
 
+def test_real_cv_figures_product_names_are_not_numbers():
+    """Incident 2026-11-21 (your CV): 'i.MX93', 'LPC55S69', 'CRC-8', 'INT8' would have been undeclared figures and
+    '1 632 W' split in two; check PROFILE_FIGURES_STANDALONE."""
+    from app.agent.agent001_profile_builder import numbers
+    assert numbers("Développement en **C/C++ sur ESP32 et LPC55S69** : réception UART avec CRC-8 sur i.MX93, INT8") == set()
+    assert numbers("régulation PI sur moteur BLDC de 1 632 W ; de 4 885 à 735 éléments ; 123,69 MHz") == {"1632", "4885", "735", "123.69"}
+    assert numbers("sensibilité de **0,9 V/G** et écart inférieur à 4 %") == {"0.9", "4"}
+
+
+def test_neighbours_only_for_an_exact_family_title():
+    """Incident 2026-11-21 (your criteria): role 'embedded software engineer' brought 'backend developer' because it
+    contains 'software engineer' (check NEIGHBOURS_EXACT_ROLE)."""
+    crit = dict(EXAMPLE_INSTANCE["criteria"], roles=["embedded software engineer"], title_families=[])
+    titles = {t["value"] for t in derive_terms(profile(), crit, SCHEMAS["words"]) if t["kind"] == "title"}
+    assert "firmware engineer" in titles and "backend developer" not in titles
+
+
 if __name__ == "__main__":
     run_main(globals())

@@ -65,5 +65,15 @@ def test_short_skill_names_do_not_match_inside_words():
     assert not contains_term(t, "c") and not contains_term(t, "langage c") and not contains_term(t, "go")
 
 
+def test_mobility_france_accepts_france_and_refuses_abroad():
+    """Case: your CV 'Mobilité France, dont Mulhouse' (check MOBILITY_FRANCE): Toulouse 0.8, Paris 1.0 (zone),
+    'New York, USA' eliminated."""
+    crit = dict(CRIT, mobility_france=True)
+    assert score_offer(offer(location="31 - Toulouse"), "keep", TERMS, PROFILE, crit, W, SCORING)["components"]["values"]["location"] == 0.8
+    assert score_offer(offer(location="Paris 11e"), "keep", TERMS, PROFILE, crit, W, SCORING)["components"]["values"]["location"] == 1.0
+    s = score_offer(offer(location="New York, USA"), "keep", TERMS, PROFILE, crit, W, SCORING)
+    assert "LOCATION_OUTSIDE" in s["elimination_reasons"]
+
+
 if __name__ == "__main__":
     run_main(globals())

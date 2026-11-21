@@ -44,7 +44,14 @@ SKILLS = [
 AGENT_ID = "agent001"
 KINDS = ("internship", "apprenticeship", "job", "freelance")
 LEVELS = ("core", "working", "notions")
-NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+# PROFILE_FIGURES_STANDALONE (real case 2026-11-21, your CV): numbers glued to a name are not figures
+# ("i.MX93", "LPC55S69", "CRC-8", "INT8", "DE0-Nano") and "1 632 W" / "4 885" are ONE number each.
+NUMBER = re.compile(r"(?<![A-Za-z0-9.\-])\d{1,3}(?:[ \u202f\u00a0]\d{3})+(?:[.,]\d+)?(?![A-Za-z0-9])"
+                    r"|(?<![A-Za-z0-9.\-])\d+(?:[.,]\d+)?(?![A-Za-z0-9])")
+
+
+def numbers(text: str) -> set[str]:
+    return {re.sub(r"[ \u202f\u00a0]", "", n).replace(",", ".") for n in NUMBER.findall(text.replace("**", ""))}
 
 
 def load_profile(path: Path) -> dict:
@@ -80,8 +87,11 @@ def check_profile(profile: dict) -> tuple[list[str], list[dict]]:
             ids.append(item.get("id"))
             for d in ("start", "end"):
                 if d in item:
+                    value = str(item[d])
+                    if section != "experiences" and re.fullmatch(r"\d{4}", value):
+                        continue          # a year alone is enough outside experiences (no month invented)
                     try:
-                        month_index(str(item[d]))
+                        month_index(value)
                     except ValueError as exc:
                         problems.append(f"{item.get('id')}: {exc}")
             if section == "experiences" and item.get("kind") not in KINDS:
@@ -90,10 +100,9 @@ def check_profile(profile: dict) -> tuple[list[str], list[dict]]:
         ids.append(b.get("id"))
         if not b.get("variants"):
             problems.append(f"{b.get('id')}: at least one wording (variants) is required")
-        declared = " ".join(str(f) for f in b.get("figures") or [])
-        declared_numbers = set(NUMBER.findall(declared))
+        declared_numbers = numbers(" ; ".join(str(f) for f in b.get("figures") or []))
         for v in b.get("variants") or []:
-            missing = [n for n in NUMBER.findall(v) if n not in declared_numbers]
+            missing = sorted(n for n in numbers(v) if n not in declared_numbers)
             if missing:
                 problems.append(f"{b.get('id')}: numbers {missing} are not declared in figures")
                 outcomes.append({"check": "PROFILE_FIGURES_DECLARED", "outcome": "kept_despite", "item": b.get("id"),
@@ -140,9 +149,11 @@ def derive_terms(profile: dict, criteria: dict, words: dict) -> list[dict]:
     for fam in criteria.get("title_families") or []:
         for t in families.get(fam, []):
             add("title", t, f"words.title_families.{fam}")
-    for r in criteria.get("roles") or []:            # a role that belongs to a family brings its neighbours
+    # NEIGHBOURS_EXACT_ROLE (your criteria 2026-11-21: "embedded software engineer" contains "software engineer" and
+    # brought the whole web-developer family): a role brings its neighbours only when it IS a title of the family.
+    for r in criteria.get("roles") or []:
         for fam, titles in families.items():
-            if any(contains_term(fold(r), t) or contains_term(fold(t), fold(r)) for t in titles):
+            if fold(r) in {fold(t) for t in titles}:
                 for t in titles:
                     add("title", t, f"neighbour of '{r}' ({fam})")
     lexicon = words.get("skill_lexicon", {})

@@ -40,7 +40,7 @@ try:  # keys (FT_CLIENT_ID...) come from .env, never from a versioned file
 except ImportError:  # pragma: no cover - python-dotenv missing: environment variables only
     pass
 
-SECRET_ENV = ("FT_CLIENT_ID", "FT_CLIENT_SECRET", "LLM_API_KEY", "IMAP_PASSWORD", "FLASK_SECRET_KEY")
+SECRET_ENV = ("FT_CLIENT_ID", "FT_CLIENT_SECRET", "DEEPSEEK_API_KEY", "GITHUB_TOKEN", "IMAP_PASSWORD", "FLASK_SECRET_KEY")
 
 
 def secrets_in_env() -> list[str]:
@@ -342,3 +342,16 @@ def month_index(value: str) -> int:
     if not m or not 1 <= int(m.group(2)) <= 12:
         raise ValueError(f"date {value!r} must be YYYY-MM or 'present'")
     return int(m.group(1)) * 12 + int(m.group(2)) - 1
+
+
+# =========================================================================== model client (DeepSeek, socle LLMClient)
+def make_llm(ctx: "RunContext", agent_id: str, transport=None) -> "sv.LLMClient":
+    """The run's model client: ONE provider and model from settings.llm, the run Budget, no automatic fallback.
+    Raises LLMError('misconfiguration') at the first call when the key is missing (never invented)."""
+    llm = ctx.config["llm"]
+    pricing = llm.get("pricing_usd_per_million") or {}
+    provider = {"name": llm["provider"], "base_url": llm["base_url"], "chat_path": llm.get("chat_path", "/chat/completions"),
+                "api_key": os.environ.get(llm["api_key_env"], ""), "pricing": pricing}
+    model = {"model": llm["model"], "max_tokens": llm.get("max_tokens", 2000), "temperature": llm.get("temperature", 0.0)}
+    return sv.LLMClient(provider, model, agent_id, timeout=llm.get("timeout_s", 120), budget=ctx.budget,
+                        transport=transport or getattr(ctx, "llm_transport", None))

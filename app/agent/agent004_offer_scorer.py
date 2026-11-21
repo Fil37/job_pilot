@@ -80,10 +80,15 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
     zone = next((z["label"] for z in criteria.get("zones") or []
                  if any(contains_term(loc, k) for k in z.get("keywords", []))), None)
     remote = bool(REMOTE.search(text)) and criteria.get("remote_ok", False)
+    foreign = next((f for f in words.get("foreign_locations", []) if contains_term(loc, f)), None)
     if zone:
         comp["location"], notes["location"] = 1.0, zone
     elif remote and scoring.get("remote_counts_as_in_zone", True):
         comp["location"], notes["location"] = 1.0, "full remote"
+    elif criteria.get("mobility_france") and loc and not foreign:
+        # MOBILITY_FRANCE (your CV 2026-11-21: "Mobilité France, dont Mulhouse"): anywhere in France is accepted,
+        # your preferred areas score higher; a foreign location stays outside.
+        comp["location"], notes["location"] = 0.8, "France (mobility)"
     elif not loc or loc in ("france", "fr", "remote"):
         comp["location"], notes["location"] = 0.5, "location unknown"
     else:
