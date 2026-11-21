@@ -212,7 +212,7 @@
   },
   "web": {
    "host": "127.0.0.1",
-   "port": 8791
+   "port": 8795
   },
   "latex": {
    "engine_path": "~/.local/bin/tectonic",

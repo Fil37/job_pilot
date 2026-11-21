@@ -15,7 +15,7 @@ cp app/assets/job_pilot.example.json app/instance/job_pilot.json    # tes critè
 cp app/assets/profile.example.yaml   app/instance/profile.yaml      # TON profil (remplacer l'exemple)
 cp .env.example .env                                                # clés (France Travail…)
 app/agent/run                     # chaîne quotidienne : collecter, filtrer, classer
-.venv/bin/python -m app.web.app   # interface : http://127.0.0.1:8791/
+.venv/bin/python -m app.web.app   # interface : http://127.0.0.1:8795/
 ```
 
 Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `--only agent003` (un agent seul),

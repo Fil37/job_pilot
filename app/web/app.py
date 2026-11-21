@@ -1,6 +1,6 @@
 """job_pilot — entry point of the web application.
 
-    .venv/bin/python -m app.web.app        then http://127.0.0.1:8791/
+    .venv/bin/python -m app.web.app        then http://127.0.0.1:8795/
 
 Loads and validates the configuration, starts agent000 (skills, health checks, interrupted runs, daily backup),
 creates the Flask application and, when settings.schedule.scheduler_enabled is true, a small in-process scheduler
@@ -62,8 +62,17 @@ def main() -> int:
         return 2
     if orch.config["schedule"].get("scheduler_enabled"):
         threading.Thread(target=scheduler, args=(orch, threading.Event()), daemon=True, name="scheduler").start()
-    web = orch.config["web"]
-    app.run(host="127.0.0.1", port=int(web.get("port", 8791)), debug=False)
+    port = int(orch.config["web"].get("port", 8795))
+    # PORT_IN_USE (real case 2026-11-21: the harness web app was already on 8791, job_pilot could not start and the
+    # address showed the harness): say it clearly instead of failing silently.
+    import socket
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            print(f"PORT {port} ALREADY IN USE (another application?). Change settings.web.port or stop it.",
+                  file=sys.stderr)
+            return 3
+    print(f"job_pilot: http://127.0.0.1:{port}/")
+    app.run(host="127.0.0.1", port=port, debug=False)
     return 0
 
 
