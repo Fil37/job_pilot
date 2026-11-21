@@ -100,5 +100,15 @@ def test_missing_credentials_is_not_configured_and_a_failing_source_gives_partia
     assert r2["status"] == "failed"
 
 
+def test_title_domain_words_are_enough():
+    """Incident 2026-11-21: Alice & Bob 'Electronics Integration Engineer' was skipped (check TITLE_DOMAIN_TOKENS);
+    'Office Manager' and 'Software Engineer' stay out for an electronics / embedded search."""
+    from app.agent.agent002_offer_collector import _title_wanted
+    terms = {"title": ["electronics engineer", "ingenieur systemes embarques", "ingenieur fpga"], "core_skill": ["vhdl"]}
+    assert _title_wanted("Electronics Integration Engineer", terms)
+    assert _title_wanted("Ingénieur logiciel embarqué (H/F)", terms) and _title_wanted("FPGA Design Engineer", terms)
+    assert not _title_wanted("Office Manager", terms) and not _title_wanted("Software Engineer", terms)
+
+
 if __name__ == "__main__":
     run_main(globals())

@@ -188,6 +188,8 @@ class LLMClient:
         model = profile_model(self.model, self.profiles, self.profile, self.agent_id, purpose)   # LLM_PROFILE
         body = {"model": model["model"], "messages": messages, "response_format": {"type": "json_object"},
                 "max_tokens": model.get("max_tokens", 2000), "temperature": model.get("temperature", 0.0)}
+        if model.get("thinking") in ("enabled", "disabled"):   # DeepSeek: "disabled" = answer only, no reasoning tokens
+            body["thinking"] = {"type": model["thinking"]}
         url = self.provider["base_url"].rstrip("/") + self.provider.get("chat_path", "/chat/completions")
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         last = LLMError("software_failure", "no attempt")

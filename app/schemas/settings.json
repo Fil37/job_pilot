@@ -7,7 +7,8 @@
   "scoring",
   "sources",
   "budgets",
-  "retention"
+  "retention",
+  "cv"
  ],
  "defaults": {
   "agents_enabled": {
@@ -16,7 +17,7 @@
    "agent003": true,
    "agent004": true,
    "agent005": false,
-   "agent006": false,
+   "agent006": true,
    "agent007": false,
    "agent008": false,
    "agent009": false,
@@ -47,7 +48,7 @@
    "chat_path": "/chat/completions",
    "api_key_env": "DEEPSEEK_API_KEY",
    "model": "deepseek-flash",
-   "max_tokens": 2000,
+   "max_tokens": 3000,
    "temperature": 0.0,
    "timeout_s": 120,
    "models_available": [
@@ -81,7 +82,8 @@
      }
     }
    },
-   "note": "Chosen by the user on 2026-11-21 (same provider as auto_clip). Prices copied from auto_clip (checked 2026-11-18, source in pricing). Never an automatic fallback to another model or provider."
+   "note": "Chosen by the user on 2026-11-21 (same provider as auto_clip). Prices copied from auto_clip (checked 2026-11-18, source in pricing). Never an automatic fallback to another model or provider.",
+   "thinking": "disabled"
   },
   "schedule": {
    "daily_at": "07:30",
@@ -184,6 +186,35 @@
   "web": {
    "host": "127.0.0.1",
    "port": 8791
+  },
+  "latex": {
+   "engine_path": "~/.local/bin/tectonic",
+   "timeout_s": 240,
+   "max_fit_iterations": 6,
+   "note": "Tectonic 0.17.0 (XeTeX), installed by Claude in ~/.local/bin on 2026-11-21 (sha256 checked against the GitHub release). Always run with --untrusted (no shell escape)."
+  },
+  "cv": {
+   "template": "app/assets/cv_template.tex",
+   "letter_template": "app/assets/letter_template.tex",
+   "max_projects": 5,
+   "min_projects": 3,
+   "spacing": [
+    {
+     "section_skip": "7pt",
+     "item_skip": "3pt"
+    },
+    {
+     "section_skip": "4pt",
+     "item_skip": "1pt"
+    }
+   ],
+   "letter_triggers": [
+    "lettre de motivation",
+    "cover letter",
+    "motivation letter",
+    "lettre de candidature"
+   ],
+   "offer_chars_to_model": 1800
   }
  }
 }

@@ -242,6 +242,8 @@ class RunContext:
     previous: dict = field(default_factory=dict)        # {agent_id: envelope} of this run (run memory)
     params: dict = field(default_factory=dict)          # parameters of this task (e.g. offer_id)
     transport: object = None                            # injectable HTTP transport (tests: no network)
+    llm_transport: object = None                        # injectable model transport (tests: no network, no cost)
+    llm_clients: list = field(default_factory=list)     # clients created in this task; agent000 records their calls
 
     @property
     def words(self) -> dict:
@@ -352,6 +354,9 @@ def make_llm(ctx: "RunContext", agent_id: str, transport=None) -> "sv.LLMClient"
     pricing = llm.get("pricing_usd_per_million") or {}
     provider = {"name": llm["provider"], "base_url": llm["base_url"], "chat_path": llm.get("chat_path", "/chat/completions"),
                 "api_key": os.environ.get(llm["api_key_env"], ""), "pricing": pricing}
-    model = {"model": llm["model"], "max_tokens": llm.get("max_tokens", 2000), "temperature": llm.get("temperature", 0.0)}
-    return sv.LLMClient(provider, model, agent_id, timeout=llm.get("timeout_s", 120), budget=ctx.budget,
-                        transport=transport or getattr(ctx, "llm_transport", None))
+    model = {"model": llm["model"], "max_tokens": llm.get("max_tokens", 2000), "temperature": llm.get("temperature", 0.0),
+             "thinking": llm.get("thinking")}
+    client = sv.LLMClient(provider, model, agent_id, timeout=llm.get("timeout_s", 120), budget=ctx.budget,
+                          transport=transport or ctx.llm_transport)
+    ctx.llm_clients.append(client)
+    return client

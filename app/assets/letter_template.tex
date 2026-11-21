@@ -1,0 +1,26 @@
+%% job_pilot — cover letter template (Tectonic/XeTeX). Same delimiters as cv_template.tex; values already escaped.
+\documentclass[11pt,a4paper]{article}
+\usepackage{fontspec}
+\usepackage[french]{babel}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage[hidelinks]{hyperref}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{8pt}
+\begin{document}
+\textbf{\VAR{name}}\\
+\VAR{city}\\
+\VAR{phone}\ \ |\ \ \VAR{email}
+
+\hfill \VAR{company}
+
+\textbf{Objet :} candidature — \VAR{offer_title}
+
+Madame, Monsieur,
+
+\BLOCK{for p in paragraphs}\VAR{p}
+
+\BLOCK{endfor}Je vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.
+
+\VAR{name}
+\end{document}

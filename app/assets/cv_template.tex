@@ -1,0 +1,60 @@
+%% job_pilot — CV template (rebuilt on 2026-11-21 from the layout of your CV PDF; compiled with Tectonic/XeTeX).
+%% Jinja2 with LaTeX-safe delimiters: VAR prints an ALREADY ESCAPED value, BLOCK is logic (see agent006 jinja_env).
+%% Every text comes from app/instance/profile.yaml (agent006 checks it: CV_FACTS_FROM_PROFILE).
+\documentclass[10pt,a4paper]{article}
+\usepackage{fontspec}
+\usepackage[french]{babel}
+\usepackage[a4paper,top=1.1cm,bottom=1.0cm,left=1.35cm,right=1.35cm]{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tabularx}
+\usepackage[hidelinks]{hyperref}
+\definecolor{accent}{HTML}{2B4C7E}
+\definecolor{muted}{HTML}{6B6B6B}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0pt}{}[{\vspace{-3pt}\color{accent}\titlerule[0.6pt]}]
+\titlespacing*{\section}{0pt}{\VAR{section_skip}}{3pt}
+\setlist[itemize]{leftmargin=1.1em,label=\textbullet,nosep,topsep=1pt,itemsep=0.5pt}
+\newcommand{\entry}[4]{\textbf{#1}\hfill{\small #2}\\{\small\color{muted}#3}\hfill{\small\color{muted}#4}\par}
+\newcommand{\project}[2]{\textbf{#1}\hfill{\small\color{muted}#2}\par}
+\begin{document}
+\begin{center}
+{\LARGE\bfseries \VAR{name}}\\[2pt]
+{\large\bfseries\color{accent} \VAR{headline}}\\[1pt]
+{\small \VAR{tagline}}\\[2pt]
+{\small \VAR{location_line}}\\
+{\small\color{accent} \href{tel:\VAR{phone_uri}}{\VAR{phone}}\ \ |\ \ \href{mailto:\VAR{email}}{\VAR{email}}}\\
+{\small\color{accent} \href{\VAR{portfolio_url}}{Portfolio : \VAR{portfolio_label}}\ \ |\ \ \href{\VAR{github_url}}{GitHub}\ \ |\ \ \href{\VAR{linkedin_url}}{LinkedIn}}
+\end{center}
+\vspace{2pt}
+\VAR{summary}
+
+\section{Compétences techniques}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\bfseries\hyphenpenalty=10000\arraybackslash}p{3.3cm}X@{}}
+\BLOCK{for g in skill_groups}\VAR{g.label} & \VAR{g.text}\\
+\BLOCK{endfor}\end{tabularx}
+
+\section{Expériences professionnelles}
+\BLOCK{for e in experiences}\entry{\VAR{e.role}}{\VAR{e.dates}}{\VAR{e.company}}{\VAR{e.city}}
+\begin{itemize}
+\BLOCK{for b in e.bullets}\item \VAR{b}
+\BLOCK{endfor}\end{itemize}
+\vspace{\VAR{item_skip}}
+\BLOCK{endfor}
+\section{Projets académiques sélectionnés}
+\BLOCK{for p in projects}\project{\VAR{p.name}}{\VAR{p.tags}}
+\begin{itemize}
+\BLOCK{for b in p.bullets}\item \VAR{b}
+\BLOCK{endfor}\end{itemize}
+\vspace{\VAR{item_skip}}
+\BLOCK{endfor}
+\section{Formation}
+\BLOCK{for d in education}\textbf{\VAR{d.degree}}\hfill{\small \VAR{d.dates}}\\
+{\small \VAR{d.school_line}}\par
+\BLOCK{endfor}\vspace{4pt}
+{\small\textbf{Langues :} \VAR{languages}}\\
+{\small\textbf{Certifications :} \VAR{certifications}}
+\end{document}

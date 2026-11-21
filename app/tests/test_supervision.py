@@ -283,6 +283,20 @@ def test_dashboard_has_everything():
                                                                       "sub": "waiting for you", "tone": "warn"}
 
 
+def test_thinking_mode_is_sent_only_when_configured():
+    """Case 2026-11-21 (job_pilot): deepseek-flash spent the 2000 output tokens reasoning and the JSON was cut; the
+    model setting "thinking": "disabled" must reach the request body, and nothing is sent when it is not set."""
+    seen = []
+
+    def transport(url, headers, body, timeout):
+        seen.append(body)
+        return 200, {"choices": [{"message": {"content": "{}"}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+    prov = {"name": "p", "base_url": "http://x.invalid", "api_key": "k", "pricing": {}}
+    sv.LLMClient(prov, {"model": "m", "thinking": "disabled"}, "a", transport=transport).chat_json([], purpose="t")
+    sv.LLMClient(prov, {"model": "m"}, "a", transport=transport).chat_json([], purpose="t")
+    assert seen[0]["thinking"] == {"type": "disabled"} and "thinking" not in seen[1]
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted((k, v) for k, v in globals().items() if k.startswith("test_")):

@@ -11,7 +11,7 @@ import secrets
 import threading
 from urllib.parse import urlsplit
 
-from flask import abort, g, redirect, render_template, request, session, url_for
+from flask import abort, g, redirect, render_template, request, send_file, session, url_for
 
 from app.agent import db_connect, utc_now
 from app.agent import supervision as sv
@@ -44,7 +44,7 @@ def register(app, orch: Orchestrator) -> None:
     @app.context_processor
     def inject():
         theme = request.cookies.get("theme")
-        return {"labels": {"app_title": "Job Pilot", "version": "v0.1", "css_file": "job_pilot_master.css"},
+        return {"labels": {"app_title": "Job Pilot", "version": "v0.2", "css_file": "job_pilot_master.css"},
                 "lang": g.lang, "theme": theme if theme in ("light", "dark") else "auto", "_": translate,
                 "csrf": session.get("csrf"), "csp_nonce": g.csp_nonce, "error": None,
                 "reasons": words["experience_reasons"], "elim": words["elimination_reasons"]}
@@ -144,6 +144,12 @@ def register(app, orch: Orchestrator) -> None:
             aliases = [dict(r) for r in c.execute("SELECT * FROM offer_aliases WHERE offer_id=?", (offer_id,))]
             run = c.execute("SELECT run_id, title, status, created_at FROM sup_runs WHERE run_id=?",
                             (o["first_seen_run"],)).fetchone()
+            apps = [dict(r) for r in c.execute("SELECT * FROM applications WHERE offer_id=? ORDER BY created_at DESC",
+                                               (offer_id,))]
+        for a in apps:
+            folder = orch.runs_dir / a["package_ref"]
+            a["files"] = [f for f in ("cv.pdf", "letter.pdf", "package.md") if (folder / f).is_file()]
+            a["package"] = (folder / "package.md").read_text(encoding="utf-8") if (folder / "package.md").is_file() else ""
         o = dict(o)
         d = decode_row(rows, "experience_decisions", d) if d else None
         s = decode_row(rows, "scores", s) if s else None
@@ -151,9 +157,10 @@ def register(app, orch: Orchestrator) -> None:
                  {"name": "Experience filter", "state": {"keep": "succeeded", "review": "partial", "reject": "failed"}
                   .get((d or {}).get("user_override") or (d or {}).get("decision"), "pending")},
                  {"name": "Scoring", "state": ("failed" if s and s["eliminated"] else "succeeded") if s else "pending"},
-                 {"name": "Application", "state": "pending"}]
-        return render_template("job_pilot_page.html", o=o, d=d, s=s, aliases=aliases, steps=steps,
-                               run=dict(run) if run else None)
+                 {"name": "Application", "state": ("succeeded" if any(a["status"] != "ready" for a in apps)
+                                                   else "partial") if apps else "pending"}]
+        return render_template("job_pilot_page.html", o=o, d=d, s=s, aliases=aliases, steps=steps, apps=apps,
+                               run=dict(run) if run else None, busy=bool(orch.busy()), msg=request.args.get("msg"))
 
     @app.post("/offers/<offer_id>/decision")
     def offer_decision(offer_id: str):
@@ -170,6 +177,56 @@ def register(app, orch: Orchestrator) -> None:
                 abort(404)
         orch.store.log_event("info", "user_decision", f"{offer_id}: {choice}", agent_id="user")
         return redirect(url_for("offer", offer_id=offer_id))
+
+    # ------------------------------------------------------------------ applications (agent006): nothing is sent
+    @app.post("/offers/<offer_id>/application")
+    def start_application(offer_id: str):
+        check_csrf()
+        with db_connect(orch.db_path) as c:
+            if not c.execute("SELECT 1 FROM offers WHERE offer_id=?", (offer_id,)).fetchone():
+                abort(404)
+        if orch.busy() or not _run_lock.acquire(blocking=False):
+            return redirect(url_for("offer", offer_id=offer_id, msg="A run is already in progress."))
+        letter = request.form.get("letter") == "1"
+
+        def work():
+            try:
+                orch.run("application", params={"agent006": {"offer_id": offer_id, "letter": letter}},
+                         title=f"application {offer_id} (web)")
+            finally:
+                _run_lock.release()
+
+        threading.Thread(target=work, daemon=True, name=f"application-{offer_id}").start()
+        return redirect(url_for("offer", offer_id=offer_id, msg="Application started."))
+
+    @app.post("/applications/<application_id>/sent")
+    def application_sent(application_id: str):
+        check_csrf()
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT offer_id FROM applications WHERE application_id=? AND status='ready'",
+                            (application_id,)).fetchone()
+            if not row:
+                abort(404)
+            c.execute("UPDATE applications SET status='sent', sent_at=? WHERE application_id=?", (utc_now(), application_id))
+            c.execute("UPDATE offers SET status='applied' WHERE offer_id=?", (row[0],))
+        orch.store.log_event("info", "application_sent", application_id, agent_id="user")
+        return redirect(url_for("offer", offer_id=row[0], msg="Application marked as sent."))
+
+    @app.get("/applications/<application_id>/<name>")
+    def application_file(application_id: str, name: str):
+        """Only the package files of a recorded application, only from inside app/instance/runs/."""
+        if name not in ("cv.pdf", "letter.pdf", "package.md", "cv.tex", "letter.txt"):
+            abort(404)
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT package_ref FROM applications WHERE application_id=?", (application_id,)).fetchone()
+        if not row:
+            abort(404)
+        base = orch.runs_dir.resolve()
+        path = (base / row[0] / name).resolve()
+        if base not in path.parents or not path.is_file():
+            abort(404)
+        mime = {"pdf": "application/pdf"}.get(name.rsplit(".", 1)[1], "text/plain; charset=utf-8")
+        return send_file(path, mimetype=mime)
 
     # ------------------------------------------------------------------ supervision
     @app.get("/standup")

@@ -176,6 +176,10 @@ class Orchestrator:
                            data={"trace": sv.redact(tb, secrets_in_env())[-1500:]})
         took = time.monotonic() - t0
         env["metrics"]["duration_s"] = round(took, 3)
+        calls = [rec for client in ctx.llm_clients for rec in client.calls]
+        if calls:                                   # agent000 files the model calls of the task (socle rule)
+            self.store.record_llm_calls(calls)
+            env["metrics"]["llm_calls"] = len(calls)
         if took > self.config["timeouts_s"]["agent_default"]:
             env["warnings"].append(f"took {took:.0f} s (limit {self.config['timeouts_s']['agent_default']} s)")
             self.store.open_incident(agent_id=aid, category="timeout", errors=[f"took {took:.0f} s"], run_id=ctx.run_id,
@@ -341,8 +345,8 @@ def digest_markdown(d: dict) -> str:
 
 # =========================================================================== command line
 def run_standalone(agent_id: str) -> int:
-    """`python -m app.agent.agentNNN_x` : run one agent alone (its run is recorded like any other)."""
-    return main(["--only", agent_id])
+    """`python -m app.agent.agentNNN_x [--offer ID]` : run one agent alone (its run is recorded like any other)."""
+    return main(["--only", agent_id] + sys.argv[1:])
 
 
 def main(argv=None) -> int:
@@ -351,6 +355,8 @@ def main(argv=None) -> int:
     p.add_argument("--only", action="append", default=[], help="run only this agent (repeatable)")
     p.add_argument("--skip", action="append", default=[], help="skip this agent (recorded 'skipped')")
     p.add_argument("--list", action="store_true", help="list agents, chains and skills")
+    p.add_argument("--offer", help="offer id for the application chain (agent006)")
+    p.add_argument("--letter", action="store_true", help="write a cover letter even if the offer does not ask")
     a = p.parse_args(argv)
     try:
         orch = Orchestrator()
@@ -367,7 +373,8 @@ def main(argv=None) -> int:
         print("A run is already in progress.", file=sys.stderr)
         return 3
     try:
-        report = orch.run(a.chain, only=a.only, skip=a.skip)
+        params = {"agent006": {"offer_id": a.offer, "letter": a.letter}} if a.offer else None
+        report = orch.run(a.chain, only=a.only, skip=a.skip, params=params)
     except ConfigError as exc:
         print(f"CONFIG ERROR: {exc}", file=sys.stderr)
         return 2

@@ -248,9 +248,25 @@ def fetch_france_travail(ctx: RunContext, http: Http, terms: dict) -> tuple[list
     return out, queries
 
 
+GENERIC_TITLE_WORDS = {"ingenieur", "engineer", "developpeur", "developer", "concepteur", "conception", "test", "tests",
+                       "et", "de", "des", "en", "logiciel", "software", "systeme", "systemes", "system", "design",
+                       "developpement", "validation", "essais", "h/f", "f/h", "senior", "junior", "lead"}
+
+
+def domain_tokens(titles: list[str]) -> set[str]:
+    """Distinctive words of your titles: 'electronique', 'embarque', 'fpga', 'firmware', 'hardware'..."""
+    words = {w.rstrip("s") for t in titles for w in re.split(r"[^a-z0-9+#]+", fold(t)) if len(w) >= 4}
+    return words - {g.rstrip("s") for g in GENERIC_TITLE_WORDS}
+
+
 def _title_wanted(title: str, terms: dict) -> bool:
+    # TITLE_DOMAIN_TOKENS (real case 2026-11-21, Alice & Bob "Electronics Integration Engineer" was skipped because
+    # no full title such as "electronics engineer" appears in it): a domain word of your titles is enough.
     f = fold(title)
-    return any(t in f for t in terms["title"]) or any(re.search(rf"\b{re.escape(k)}\b", f) for k in terms["core_skill"])
+    if any(t in f for t in terms["title"]) or any(re.search(rf"\b{re.escape(k)}\b", f) for k in terms["core_skill"]):
+        return True
+    words = {w.rstrip("s") for w in re.split(r"[^a-z0-9+#]+", f)}       # singular / plural
+    return bool(words & domain_tokens(terms["title"]))
 
 
 def fetch_greenhouse(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:

@@ -3,7 +3,7 @@
 Suit ta recherche d'emploi de bout en bout : trouve les offres, les filtre, les classe, prépare les candidatures,
 comble les lacunes et suit les réponses. **Rien n'est jamais envoyé vers l'extérieur sans ta validation.**
 
-Version 0.1 (2026-11-21) : les étapes 1 à 5 du plan sont construites (profil, collecte, filtre d'expérience,
+Version 0.2 (2026-11-21) : les étapes 1 à 5 et 7 du plan sont construites (CV et paquet de candidature) (profil, collecte, filtre d'expérience,
 score, récapitulatif, interface, supervision). Les agents 005 à 011 ont leur contrat et leurs skills, mais restent
 désactivés tant que leur étape n'est pas construite.
 
@@ -32,7 +32,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | agent003_experience_filter | lit tout le texte : années, « hors stage / alternance », junior / senior, contradictions → garder / rejeter / à vérifier | construit |
 | agent004_offer_scorer | score = somme pondérée, satisfait / manques, éliminations avec raison | construit |
 | agent005_company_researcher | fiche entreprise sourcée | étape 6 |
-| agent006_application_builder | CV LaTeX, lettre, paquet (vérification des faits, 1 page, ATS) | étape 7 |
+| agent006_application_builder | CV LaTeX (Tectonic), lettre si demandée, paquet ; DeepSeek propose titre / accroche / résumé, le programme vérifie (faits du profil, 1 page, ATS) | construit |
 | agent007_gap_project_planner | lacunes sur 30 jours → brief de projet | étape 9 |
 | agent008_portfolio_publisher | démo locale, publication datée après validation | étape 9 |
 | agent009_inbox_tracker | boîte mail en lecture seule, classement avec confiance, alertes | étape 8 |
@@ -51,6 +51,15 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | Alertes LinkedIn / Indeed | lues dans ta boîte par agent009 | étape 8 |
 
 Le journal des sources réellement interrogées est sur la page Supervision.
+
+## Modèle et LaTeX
+
+- Modèle : DeepSeek `deepseek-flash` (`settings.json` → `llm`, réglage `thinking: disabled`), clé `DEEPSEEK_API_KEY` dans `.env`.
+  Aucune bascule automatique ; le coût de chaque appel est rangé par run (page Supervision).
+- LaTeX : Tectonic 0.17.0 dans `~/.local/bin` (sans root), toujours lancé avec `--untrusted`.
+  Modèle de CV : `app/assets/cv_template.tex`, reconstruit d'après ton CV PDF.
+- Préparer une candidature : bouton sur la page de l'offre, ou `app/agent/run --chain application --offer <offer_id> [--letter]`.
+  Rien n'est envoyé : tu relis le paquet, tu envoies toi-même, puis « Marquer comme envoyée ».
 
 ## Données
 

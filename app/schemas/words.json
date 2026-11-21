@@ -790,7 +790,20 @@
    "Outside your areas (and not remote).": "Hors de tes zones (et pas en télétravail).",
    "Contains a keyword you excluded.": "Contient un mot-clé que tu as exclu.",
    "Rejected by the experience filter.": "Rejetée par le filtre d'expérience.",
-   "France (mobility)": "France (mobilité)"
+   "France (mobility)": "France (mobilité)",
+   "Application package": "Paquet de candidature",
+   "Application started.": "Préparation de la candidature lancée.",
+   "Mark as sent": "Marquer comme envoyée",
+   "Open the CV": "Ouvrir le CV",
+   "Open the letter": "Ouvrir la lettre",
+   "Package": "Paquet",
+   "ready": "prête",
+   "sent": "envoyée",
+   "Points of attention": "Points de vigilance",
+   "Application marked as sent.": "Candidature marquée comme envoyée.",
+   "with a cover letter": "avec lettre de motivation",
+   "Did you send this application yourself?": "As-tu envoyé cette candidature toi-même ?",
+   "applied": "candidaté"
   }
  },
  "skill_text": {
@@ -803,7 +816,11 @@
    "Extract experience requirements from the full description, with the source sentence.": "Extraire les exigences d'expérience de la description complète, avec la phrase source.",
    "Decide keep / reject / review with a traceable reason; unclear cases go to review.": "Décider garder / rejeter / à vérifier avec une raison traçable ; les cas flous vont en revue.",
    "Compute a score from skills, level, location, salary and sector.": "Calculer un score à partir des compétences, du niveau, du lieu, du salaire et du secteur.",
-   "List the requirements met and the missing ones for each offer.": "Lister les exigences satisfaites et les manques de chaque offre."
+   "List the requirements met and the missing ones for each offer.": "Lister les exigences satisfaites et les manques de chaque offre.",
+   "Choose projects, bullets and skills, adapt the title and profile paragraph, compile the PDF.": "Choisir projets, puces et compétences, adapter le titre et le paragraphe de profil, compiler le PDF.",
+   "Check that every figure and technology of the CV exists in the profile file.": "Vérifier que chaque chiffre et chaque techno du CV existe dans le fichier profil.",
+   "Check the CV fits on one page and its text is readable by screening software.": "Vérifier que le CV tient sur une page et que son texte est lisible par les logiciels de tri.",
+   "Write the cover letter on the same principle when the offer asks for it.": "Rédiger la lettre de motivation sur le même principe quand l'offre l'exige."
   }
  },
  "foreign_locations": [
