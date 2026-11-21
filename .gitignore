@@ -6,3 +6,4 @@ app/instance/*
 !app/instance/runs/
 app/instance/runs/*
 !app/instance/runs/.keep
+.pytest_cache/

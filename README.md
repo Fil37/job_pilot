@@ -64,7 +64,7 @@ Le journal des sources réellement interrogées est sur la page Supervision.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest app/tests -q          # toute la suite
+.venv/bin/python -m pytest -p no:cacheprovider app/tests -q   # toute la suite (sans cache à la racine)
 .venv/bin/python app/tests/test_experience.py    # un fichier, PASS / FAIL par cas
 ```
 
