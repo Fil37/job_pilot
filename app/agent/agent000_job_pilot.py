@@ -365,16 +365,16 @@ def build_digest(db_path: Path, cfg: dict, weights_version: str) -> dict:
 
 
 def digest_markdown(d: dict) -> str:
-    lines = ["# job_pilot — offres du jour", ""]
+    lines = ["# Offres du jour", ""]
     for i, r in enumerate(d["top"], 1):
-        lines.append(f"{i}. **{r['score']:.0f}** — {r['title']} · {r['company']} · {r['location'] or '?'} — {r['url']}")
+        lines.append(f"{i}. **{r['score']:.0f}** · {r['title']} · {r['company']} · {r['location'] or '?'} ({r['url']})")
         lines.append(f"   - pourquoi : {'; '.join(r['why'])}")
         if r["missing"]:
             lines.append(f"   - manques : {', '.join(r['missing'])}")
     lines += ["", "## À vérifier", ""]
     for r in d["review"]:
-        lines.append(f"- {r['title']} · {r['company']} — {r['reason_code']} : {r['reason']}"
-                     + (f" — « {r['source_sentence']} »" if r["source_sentence"] else ""))
+        lines.append(f"- {r['title']} · {r['company']} : {r['reason']}"
+                     + (f" (« {r['source_sentence']} »)" if r["source_sentence"] else ""))
     return "\n".join(lines) + "\n"
 
 

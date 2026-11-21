@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ o.title }} — {{ labels.app_title }}</title>
+  <title>{{ doc.title if doc else o.title }} · {{ labels.app_title }}</title>
   <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
+  <link rel="icon" href="{{ url_for('static', filename='images/job_pilot_icon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
 </head>
 <body>
@@ -24,6 +25,24 @@
 </aside>
 <div class="content">
 <main class="wrap">
+  {% if doc %}
+  {#- document mode: package, project brief or interview sheet, rendered from job_pilot's Markdown -#}
+  <div class="page-head">
+    <div>
+      <p class="crumbs"><a href="{{ url_for('home') }}">← {{ _('Home') }}</a>{% if doc.offer_id %} · <a href="{{ url_for('offer', offer_id=doc.offer_id) }}">{{ _('Offer') }}</a>{% endif %} · {{ _({'package': 'Application package', 'brief': 'Project idea', 'sheet': 'Interview sheet'}[doc.kind]) }}</p>
+      <h1 class="title-clamp">{{ doc.title }}</h1>
+    </div>
+    <div class="head-actions">
+      {% for f in doc.files %}<a class="button small" href="{{ url_for('application_file', application_id=doc.ref, name=f) }}" target="_blank" rel="noopener">{{ _('Open the CV') if f == 'cv.pdf' else _('Open the letter') }}</a>{% endfor %}
+    </div>
+  </div>
+  {% for sec in doc.sections %}
+  <section class="panel doc">
+    {% if sec.title %}<div class="panel-title"><h2>{{ sec.title }}</h2></div>{% endif %}
+    {{ sec.html }}
+  </section>
+  {% endfor %}
+  {% else %}
   {#- job_pilot — offer page: offer, experience decision with its source sentence, score, aliases, provenance. -#}
   <div class="page-head">
     <div>
@@ -57,7 +76,7 @@
     {% if d %}
     <dl class="facts">
       <div><dt>{{ _('Reason') }}</dt><dd>{{ d.reason_code }}</dd></div>
-      <div><dt>{{ _('Years required') }}</dt><dd>{{ d.years_required if d.years_required is not none else '—' }}</dd></div>
+      <div><dt>{{ _('Years required') }}</dt><dd>{{ d.years_required if d.years_required is not none else _('not stated') }}</dd></div>
       <div><dt>{{ _('Candidate years') }}</dt><dd>{{ d.candidate_years }}</dd></div>
       <div><dt>{{ _('Confidence') }}</dt><dd>{{ '%.0f'|format(d.confidence * 100) }} %</dd></div>
     </dl>
@@ -78,9 +97,9 @@
     {% if s %}
     <table><thead><tr><th>{{ _('Components') }}</th><th>{{ _('Value') }}</th><th>{{ _('Weight') }}</th><th></th></tr></thead>
       <tbody>{% for k, w in s.components.weights.items() %}<tr><td>{{ _(k) }}</td><td>{{ '%.2f'|format(s.components['values'][k]) }}</td><td>{{ w }}</td><td class="small faint">{{ s.components.notes.get(k, '') }}</td></tr>{% endfor %}</tbody></table>
-    <p class="small mt-12"><strong>{{ _('Matched') }}</strong> : {% for m in s.matched %}<span class="chip">{{ m.skill }} ({{ _(m.level) }})</span>{% else %}—{% endfor %}</p>
-    <p class="small"><strong>{{ _('Missing') }}</strong> : {% for m in s.missing %}<span class="chip">{{ m }}</span>{% else %}—{% endfor %}</p>
-    {% if s.eliminated %}<p class="alert">{{ _('Eliminated') }} : {% for e in s.elimination_reasons %}{{ e }} — {{ _(elim.get(e, '')) }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    <p class="small mt-12"><strong>{{ _('Matched') }}</strong> : {% for m in s.matched %}<span class="chip">{{ m.skill }} ({{ _(m.level) }})</span>{% else %}{{ _('none') }}{% endfor %}</p>
+    <p class="small"><strong>{{ _('Missing') }}</strong> : {% for m in s.missing %}<span class="chip">{{ m }}</span>{% else %}{{ _('none') }}{% endfor %}</p>
+    {% if s.eliminated %}<p class="alert">{{ _('Eliminated') }} : {% for e in s.elimination_reasons %}{{ _(elim.get(e, e)) }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
     {% else %}<p class="empty small">{{ _('Not scored yet.') }}</p>{% endif %}
   </section>
   </div>
@@ -97,7 +116,7 @@
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Mails') }} <span class="count">{{ mails|length }}</span></h2></div>
     <ul class="list">{% for m in mails %}<li><span class="badge {{ 'partial' if m.needs_check else 'succeeded' }}">{{ _(m.category) }}</span><strong>{{ m.subject }}</strong><span class="small faint">{{ m.from_domain }} · {{ m.received_at[:16].replace('T', ' ') }} · {{ '%.0f'|format(m.confidence * 100) }} %{% if m.proposed_datetime %} · {{ m.proposed_datetime.replace('T', ' ') }}{% endif %}</span></li>{% endfor %}</ul>
-    {% for sh in sheets %}<details class="mt-12"><summary><strong>{{ _('Interview sheet') }}</strong></summary><div class="scroll-box tall"><p class="small pre-line">{{ sh.text }}</p></div></details>{% endfor %}
+    {% for sh in sheets %}<p class="mt-12"><a class="button small" href="{{ url_for('document', kind='sheet', ref=sh.sheet_id) }}">{{ _('Interview sheet') }}</a></p>{% endfor %}
     {% for dr in drafts %}<details class="mt-12"><summary><strong>{{ _('Follow-up draft') }}</strong> <span class="badge plain">{{ dr.status }}</span></summary><p class="small pre-line">{{ dr.text }}</p></details>{% endfor %}
   </section>
   {% endif %}
@@ -105,8 +124,7 @@
   {% for a in apps %}
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Application package') }}</h2><span class="badge {{ 'succeeded' if a.status != 'ready' else 'partial' }}">{{ _(a.status) }}</span></div>
-    <p class="chips">{% for f in a.files %}<a class="button ghost small" href="{{ url_for('application_file', application_id=a.application_id, name=f) }}" target="_blank" rel="noopener">{{ f }}</a>{% endfor %}<span class="chip">{{ a.created_at[:16].replace('T', ' ') }}</span><span class="chip">CV {{ a.cv_version }}</span></p>
-    <div class="scroll-box"><p class="small pre-line">{{ a.package }}</p></div>
+    <p class="chips"><a class="button small" href="{{ url_for('document', kind='package', ref=a.application_id) }}">{{ _('Open the package') }}</a>{% for f in a.files if f != 'package.md' %}<a class="button ghost small" href="{{ url_for('application_file', application_id=a.application_id, name=f) }}" target="_blank" rel="noopener">{{ _('Open the CV') if f == 'cv.pdf' else _('Open the letter') }}</a>{% endfor %}<span class="chip">{{ a.created_at[:16].replace('T', ' ') }}</span><span class="chip">CV {{ a.cv_version }}</span></p>
     {% if a.status == 'ready' %}
     <form method="post" action="{{ url_for('application_sent', application_id=a.application_id) }}" class="inline mt-12" data-confirm="{{ _('Did you send this application yourself?') }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -124,6 +142,7 @@
     <div class="panel-title"><h2>{{ _('Seen on') }} <span class="count">{{ aliases|length }}</span></h2>{% if run %}<span class="chip">{{ _('First seen in run') }} {{ run.run_id }}</span>{% endif %}</div>
     <ul class="list">{% for a in aliases %}<li><span class="badge plain">{{ a.source_id }}</span><a href="{{ a.url }}" rel="noopener noreferrer" target="_blank">{{ a.url[:90] }}</a><span class="small faint">{{ a.seen_at[:16].replace('T', ' ') }}</span></li>{% endfor %}</ul>
   </section>
+  {% endif %}
 </main>
 </div>
 <script nonce="{{ csp_nonce }}">

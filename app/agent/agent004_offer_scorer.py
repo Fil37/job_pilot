@@ -31,7 +31,7 @@ SKILLS = [
      "objective": "Compute a score from skills, level, location, salary and sector.",
      "summary": "Score = 100 x weighted sum of components in [0, 1] (weights of settings.json, versioned). "
                 "Eliminations: avoided sector, excluded keyword, contract not accepted, salary below your minimum, "
-                "outside your areas, experience rejected — each with its reason. Check SCORE_IS_WEIGHTED_SUM. "
+                "outside your areas, experience rejected, each with its reason. Check SCORE_IS_WEIGHTED_SUM. "
                 "Shown on the home page and the offer page (Scoring)."},
     {"skill_id": "SK_GAP_LIST", "version": "1", "status": "proposed",
      "objective": "List the requirements met and the missing ones for each offer.",
@@ -66,18 +66,18 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
     missing = sorted(s for s in req if s not in skills_p)
     comp, notes, elim = {}, {}, []
     comp["skills"] = round(sum(LEVEL_WEIGHT[skills_p[s]] for s in matched) / len(req), 4) if req else 0.5
-    notes["skills"] = f"{len(matched)}/{len(req)} skills" if req else "no skill detected (neutral)"
+    notes["skills"] = f"{len(matched)} compétence(s) sur {len(req)}" if req else "aucune compétence détectée (neutre)"
     comp["level"] = {"keep": 1.0, "review": 0.5, "reject": 0.0}[decision]
-    notes["level"] = f"experience: {decision}"
+    notes["level"] = {"keep": "expérience compatible", "review": "expérience à vérifier", "reject": "expérience rejetée"}[decision]
     if decision == "reject":
         elim.append("EXPERIENCE_REJECTED")
     roles = [fold(r) for r in criteria.get("roles") or []]
     if any(contains_term(title, r) for r in roles):
-        comp["title"], notes["title"] = 1.0, "one of your roles"
+        comp["title"], notes["title"] = 1.0, "un de tes postes visés"
     elif any(contains_term(title, t) for t in terms["title"]):
-        comp["title"], notes["title"] = 0.8, "neighbour title"
+        comp["title"], notes["title"] = 0.8, "intitulé voisin"
     else:
-        comp["title"], notes["title"] = 0.2, "other title"
+        comp["title"], notes["title"] = 0.2, "autre intitulé"
     loc = fold(offer.get("location") or "")
     zone = next((z["label"] for z in criteria.get("zones") or []
                  if any(contains_term(loc, k) for k in z.get("keywords", []))), None)
@@ -86,32 +86,32 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
     if zone:
         comp["location"], notes["location"] = 1.0, zone
     elif remote and scoring.get("remote_counts_as_in_zone", True):
-        comp["location"], notes["location"] = 1.0, "full remote"
+        comp["location"], notes["location"] = 1.0, "télétravail complet"
     elif criteria.get("mobility_france") and loc and not foreign:
         # MOBILITY_FRANCE (your CV 2026-11-21: "Mobilité France, dont Mulhouse"): anywhere in France is accepted,
         # your preferred areas score higher; a foreign location stays outside.
         comp["location"], notes["location"] = 0.8, "France (mobility)"
     elif not loc or loc in ("france", "fr", "remote"):
-        comp["location"], notes["location"] = 0.5, "location unknown"
+        comp["location"], notes["location"] = 0.5, "lieu non précisé"
     else:
-        comp["location"], notes["location"] = 0.0, f"outside your areas ({offer.get('location')})"
+        comp["location"], notes["location"] = 0.0, f"hors de tes zones ({offer.get('location')})"
         elim.append("LOCATION_OUTSIDE")
     smin = criteria.get("salary_min_eur")
     top = offer.get("salary_max") or offer.get("salary_min")
     if top is None or not smin:
-        comp["salary"], notes["salary"] = scoring.get("unknown_salary_value", 0.5), "salary unknown"
+        comp["salary"], notes["salary"] = scoring.get("unknown_salary_value", 0.5), "salaire non communiqué"
     elif top >= smin:
-        comp["salary"], notes["salary"] = 1.0, f"up to {top:,.0f} EUR/year"
+        comp["salary"], notes["salary"] = 1.0, f"jusqu'à {top:,.0f} € par an".replace(",", " ")
     else:
-        comp["salary"], notes["salary"] = 0.0, f"up to {top:,.0f} EUR/year < {smin:,.0f}"
+        comp["salary"], notes["salary"] = 0.0, f"jusqu'à {top:,.0f} € par an, sous ton minimum de {smin:,.0f} €".replace(",", " ")
         elim.append("SALARY_BELOW_MIN")
-    comp["sector"], notes["sector"] = 1.0, "no avoided sector"
+    comp["sector"], notes["sector"] = 1.0, "aucun secteur évité"
     for ex in terms["exclusion"]:
         kind, _, rest = ex.partition(":")
         if kind == "sector":
             sector, _, kw = rest.partition(":")
             if contains_term(text, kw):
-                comp["sector"], notes["sector"] = 0.0, f"avoided sector {sector} ('{kw}')"
+                comp["sector"], notes["sector"] = 0.0, f"secteur évité : {sector} (« {kw} »)"
                 if "AVOIDED_SECTOR" not in elim:
                     elim.append("AVOIDED_SECTOR")
         elif kind == "keyword" and contains_term(text, rest) and "EXCLUDED_KEYWORD" not in elim:
@@ -122,7 +122,7 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
             notes["contract"] = offer.get("contract")
     weights = scoring["weights"]
     total = round(100 * sum(weights[k] * comp[k] for k in weights), 1)
-    return {"score": total, "components": {"values": comp, "notes": notes, "weights": weights},
+    return {"score": total, "components": {"values": comp, "notes": notes, "weights": weights, "decision": decision},
             "matched": [{"skill": s, "level": skills_p[s]} for s in matched], "missing": missing,
             "eliminated": bool(elim), "elimination_reasons": elim}
 
@@ -148,8 +148,8 @@ class Agent(BaseAgent):
                 # not scored yet, or scored with another experience decision than the current one (your override)
                 "SELECT d.offer_id FROM experience_decisions d JOIN offers o USING(offer_id) WHERE d.profile_hash=? "
                 "AND o.status='new' AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.offer_id=d.offer_id AND "
-                "s.profile_hash=d.profile_hash AND s.weights_version=? AND json_extract(s.components, '$.notes.level') "
-                "= 'experience: ' || COALESCE(d.user_override, d.decision))", (prof["profile_hash"], wv))]
+                "s.profile_hash=d.profile_hash AND s.weights_version=? AND json_extract(s.components, '$.decision') "
+                "= COALESCE(d.user_override, d.decision))", (prof["profile_hash"], wv))]
         return [{"objective": f"score {len(ids[i:i + 100])} offers", "offer_ids": ids[i:i + 100]}
                 for i in range(0, len(ids), 100)] or [{"objective": "nothing new to score", "offer_ids": []}]
 

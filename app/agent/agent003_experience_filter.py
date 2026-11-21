@@ -127,6 +127,11 @@ def countable_years(months: dict, rule: dict, excl_i: bool, excl_a: bool) -> flo
     return round(min(m, months.get("total", m)) / 12, 1)
 
 
+def num(x) -> str:
+    """French number: 1.5 -> '1,5', 2.0 -> '2'."""
+    return f"{x:g}".replace(".", ",")
+
+
 def decide(x: dict, months: dict, rule: dict, exp_cfg: dict) -> dict:
     """keep / reject / review + reason code, sentence and confidence (all computed, nothing generated)."""
     cand = countable_years(months, rule, x["excludes_internship"], x["excludes_apprenticeship"])
@@ -151,40 +156,38 @@ def decide(x: dict, months: dict, rule: dict, exp_cfg: dict) -> dict:
         low, low_sentence, _ = min(pool, key=lambda t: t[0])
         req, sentence, _ = max(pool, key=lambda t: t[0]) if required else (low, low_sentence, True)
         if required and low <= limit < req and req - low > spread:
-            return res("review", "MULTIPLE_YEARS", f"{low} and {req} years both required", sentence, 0.5, req)
+            return res("review", "MULTIPLE_YEARS", f"{low} et {req} ans exigés dans deux phrases différentes", sentence, 0.5, req)
         if x["junior"] and req >= 3:
-            return res("review", "CONTRADICTION_JUNIOR_YEARS", f"'{x['junior']}' but {req} years asked", sentence, 0.5, req)
+            return res("review", "CONTRADICTION_JUNIOR_YEARS", f"« {x['junior']} » mais {req} ans exigés", sentence, 0.5, req)
         if x["label_beginner"] and req >= 2 or (x["label_years"] is not None and abs(x["label_years"] - req) >= 2):
             return res("review", "CONTRADICTION_LABEL_TEXT",
-                       f"label says {'beginner' if x['label_beginner'] else str(x['label_years']) + ' years'}, text says {req}",
+                       f"le site indique « {'débutant accepté' if x['label_beginner'] else str(x['label_years']) + ' ans'} », le texte {req} ans",
                        sentence, 0.5, req)
         if req <= limit:
-            return res("keep", "YEARS_WITHIN_LIMIT", f"{req} years asked, limit {limit:g} (you count {cand:g})",
+            return res("keep", "YEARS_WITHIN_LIMIT", f"{req} ans exigés, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))",
                        sentence, 0.9, req)
         excluded = x["excludes_internship"] or x["excludes_apprenticeship"]
         if req <= limit + gap:
             code = "EXCLUSION_REDUCES_YEARS" if excluded and req <= limit_all else "YEARS_BORDERLINE"
-            return res("review", code, f"{req} years asked, limit {limit:g} (you count {cand:g})", sentence, 0.5, req)
+            return res("review", code, f"{req} ans exigés, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))", sentence, 0.5, req)
         if excluded and req <= limit_all:
             return res("reject", "EXCLUSION_REDUCES_YEARS",
-                       f"{req} years asked without internships/apprenticeships; you count {cand:g}",
+                       f"{req} ans exigés hors stages ou alternance, tu en comptes {num(cand)}",
                        x["exclusion_sentence"] or sentence, 0.85, req)
-        return res("reject", "YEARS_ABOVE_LIMIT", f"{req} years asked, limit {limit:g} (you count {cand:g})",
+        return res("reject", "YEARS_ABOVE_LIMIT", f"{req} ans exigés, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))",
                    sentence, 0.95 if req >= limit + 3 else 0.85, req)
     if x["label_years"] is not None and x["label_years"] > limit:
         return res("review", "CONTRADICTION_LABEL_TEXT",
-                   f"label says {x['label_years']} years, the text gives no number", None, 0.5, None)
+                   f"le site indique {x['label_years']} ans, le texte ne donne aucun nombre", None, 0.5, None)
     if x["junior"]:
-        return res("keep", "JUNIOR_SIGNAL", f"'{x['junior']}' in the text", None, 0.85)
+        return res("keep", "JUNIOR_SIGNAL", f"« {x['junior']} » dans l'offre", None, 0.85)
     if x["senior"]:
-        return res("review", "SENIOR_TITLE_NO_YEARS", f"'{x['senior'].strip()}' in the title, no number of years", None, 0.5)
+        return res("review", "SENIOR_TITLE_NO_YEARS", f"« {x['senior'].strip()} » dans l'intitulé, sans nombre d'années", None, 0.5)
     if x.get("partial"):
         # PARTIAL_DESCRIPTION (France Travail listing pages, 2026-11-21): an excerpt without any requirement says
         # nothing about the full text, so the offer goes to review, never to "keep" by default.
-        return res("review", "PARTIAL_DESCRIPTION", "excerpt only, no experience information in it", None, 0.4)
-    if x["senior"]:
-        return res("review", "SENIOR_TITLE_NO_YEARS", f"'{x['senior'].strip()}' in the title, no number of years", None, 0.5)
-    return res("keep", "NO_REQUIREMENT", "no experience requirement found in the full text", None, 0.7)
+        return res("review", "PARTIAL_DESCRIPTION", "extrait seulement, sans information sur l'expérience", None, 0.4)
+    return res("keep", "NO_REQUIREMENT", "aucune exigence d'expérience dans le texte complet", None, 0.7)
 
 
 class Agent(BaseAgent):
@@ -232,7 +235,7 @@ class Agent(BaseAgent):
                     except Exception as exc:  # noqa: BLE001 - an unparsable offer goes to review, never to the bin
                         x = {"excludes_internship": False, "excludes_apprenticeship": False, "junior": None, "senior": None}
                         d = {"decision": "review", "reason_code": "UNREADABLE", "candidate_years": 0,
-                             "reason": f"could not be read: {type(exc).__name__}", "source_sentence": None,
+                             "reason": f"texte illisible ({type(exc).__name__})", "source_sentence": None,
                              "confidence": 0.0, "years_required": None}
                         warnings.append(f"{oid}: {type(exc).__name__}")
                     if len({m[0] for m in x.get("mentions", []) if not m[2]}) > 1:

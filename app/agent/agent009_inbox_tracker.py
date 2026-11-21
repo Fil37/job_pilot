@@ -159,6 +159,11 @@ def classify_rules(subject: str, excerpt: str, rules: dict) -> tuple[str, float,
     return best, 0.55, hits
 
 
+def fr_datetime(iso: str) -> str:
+    d = datetime.fromisoformat(iso)
+    return d.strftime("%d/%m/%Y à %Hh%M")
+
+
 DATE_RX = re.compile(r"(?:le\s+)?(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\s*(?:a|à|-)?\s*(\d{1,2})\s*[h:]\s*(\d{2})?")
 
 
@@ -254,18 +259,18 @@ class Agent(BaseAgent):
                     new = CATEGORY_TO_STATUS[ev["category"]]
                     if cur in STATUS_ORDER and STATUS_ORDER.index(new) > STATUS_ORDER.index(cur):
                         c.execute("UPDATE applications SET status=? WHERE application_id=?", (new, ev["application_id"]))
-                label = f"{ev['category']}: {ev['subject'][:80]} ({ev['from_domain']})"
+                label = f"« {ev['subject'][:80]} » ({ev['from_domain']})"     # the category is the badge
                 untracked = not ev["application_id"] and ev["confidence"] >= cfg["min_confidence"]
                 if untracked:
                     # UNTRACKED_ANSWER: a clear answer to an application sent outside job_pilot
                     alerts.append({"kind": "immediate" if ev["category"] in IMMEDIATE else "grouped",
                                    "category": ev["category"], "application_id": None, "ref": ev["event_id"],
-                                   "message": f"Candidature non suivie — {label}"})
+                                   "message": f"Candidature non suivie · {label}"})
                 elif ev["needs_check"]:
                     alerts.append({"kind": "immediate", "category": "to_check", "application_id": ev["application_id"],
-                                   "ref": ev["event_id"], "message": f"À vérifier — {label}"})
+                                   "ref": ev["event_id"], "message": f"À vérifier · {label}"})
                 elif ev["category"] in IMMEDIATE:
-                    when = f" — proposé : {ev['proposed_datetime']}" if ev.get("proposed_datetime") else ""
+                    when = f", date proposée le {fr_datetime(ev['proposed_datetime'])}" if ev.get("proposed_datetime") else ""
                     alerts.append({"kind": "immediate", "category": ev["category"], "application_id": ev["application_id"],
                                    "ref": ev["event_id"], "message": f"{label}{when}"})
                 elif ev["category"] in ("acknowledgement", "rejection"):

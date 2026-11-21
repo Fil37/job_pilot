@@ -691,7 +691,6 @@
    "Agents, runs, costs and decisions waiting for you.": "Agents, runs, coûts et décisions qui t'attendent.",
    "Runs in progress": "Runs en cours",
    "Nothing running.": "Rien en cours.",
-   "Agents — Health": "Agents — Santé",
    "Incidents": "Incidents",
    "No open incident.": "Aucun incident ouvert.",
    "Resolved": "Résolu",
@@ -851,7 +850,13 @@
    "portfolio": "portfolio",
    "interview_sheet": "fiche d'entretien",
    "followup": "relance",
-   "to_check": "à vérifier"
+   "to_check": "à vérifier",
+   "Agents: health": "Agents : santé",
+   "none": "aucune",
+   "not stated": "non précisé",
+   "not yet": "pas encore",
+   "Open the package": "Ouvrir le paquet",
+   "Project idea": "Idée de projet"
   }
  },
  "skill_text": {

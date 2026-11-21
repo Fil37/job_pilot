@@ -75,6 +75,7 @@ CHECKS = [
     ("SUMMARY_WORDS_FROM_PROFILE", "every meaningful word of the model's headline / tagline / summary is in profile.yaml",
      "2026-11-21 Alice & Bob CV: 'avec un souci de robustesse et de maintenabilité' added by the model"),
 ]
+LABELS_FR = {"headline": "Titre", "tagline": "Accroche", "summary": "Résumé"}
 SECTIONS = ("Compétences techniques", "Expériences professionnelles", "Projets académiques sélectionnés", "Formation")
 LATEX_SPECIAL = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_", "{": r"\{",
                  "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
@@ -177,11 +178,27 @@ text only); 2: matching experiences and projects; 3: availability and wish for a
 """
 
 
+FRENCH_STYLE = (" Write natural French typography: never use the long dash (—, –) nor English punctuation habits; "
+                "use commas, colons or parentheses instead.")
+
+
+def no_em_dash(value):
+    """NO_EM_DASH (user request 2026-11-21: no English-style long dashes): the program fixes model texts itself."""
+    if isinstance(value, str):
+        v = value.replace(" — ", ", ").replace(" – ", ", ").replace("—", ", ").replace("–", "-")
+        return v.replace(", ,", ",").replace(" ,", ",")
+    if isinstance(value, list):
+        return [no_em_dash(v) for v in value]
+    if isinstance(value, dict):
+        return {k: no_em_dash(v) for k, v in value.items()}
+    return value
+
+
 def ask_with_corrections(client, system: str, payload: dict, check, *, purpose: str, ctx: RunContext,
                          max_corrections: int) -> tuple[dict | None, list[str], int]:
     """One call + at most `max_corrections` re-sends naming the defect and the expected correction. Returns
     (answer or None, last problems, number of corrections)."""
-    messages = [{"role": "system", "content": system},
+    messages = [{"role": "system", "content": system + FRENCH_STYLE},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
     problems: list[str] = []
     for attempt in range(max_corrections + 1):
@@ -189,6 +206,7 @@ def ask_with_corrections(client, system: str, payload: dict, check, *, purpose: 
             ans = client.chat_json(messages, purpose=purpose, run_id=ctx.run_id, task_id=ctx.task_id)
         except sv.LLMError as exc:
             return None, [f"model unavailable: {exc.category}"], attempt
+        ans = no_em_dash(ans)
         problems = check(ans)
         if not problems:
             return ans, [], attempt
@@ -252,11 +270,16 @@ def company_lines(ctx: RunContext, name: str) -> list[str]:
         row = c.execute("SELECT facts, match_confidence FROM companies WHERE company_key=?", (company_key(name),)).fetchone()
     if not row:
         return ["- information absente (pas de fiche pour cette entreprise)"]
-    out = [] if row[1] >= 0.6 else [f"- ⚠ correspondance incertaine avec le registre ({row[1]}) : à vérifier"]
+    out = [] if row[1] >= 0.6 else [f"- Correspondance incertaine avec le registre ({row[1]}) : à vérifier"]
+    sources = []
     for f in json.loads(row[0]):
-        tag = {"verified_fact": "", "hypothesis": " (hypothèse)", "missing": " (absent)"}.get(f["kind"], "")
-        src = f" — {f['source']}" if f["source"].startswith("http") else ""
-        out.append(f"- {f['label']}{tag} : {f['value']}{src}")
+        tag = {"verified_fact": "", "hypothesis": " (hypothèse)", "missing": " (absent)",
+               "retrieval_error": " (erreur de récupération)"}.get(f["kind"], "")
+        out.append(f"- {f['label']}{tag} : {f['value']}")
+        if f["source"].startswith("http") and f["source"] not in sources:
+            sources.append(f["source"])
+    if sources:
+        out.append("- Sources : " + " ; ".join(sources))
     return out
 
 
@@ -356,7 +379,7 @@ class Agent(BaseAgent):
                 probs += [f"{k}: {p}" for p in fact_problems(ans[k], corpus, lexicon)]
                 extra = novel_words(ans[k], corpus)
                 if extra:
-                    probs.append(f"{k}: words absent from the candidate data {extra} — rephrase with the candidate's own words")
+                    probs.append(f"{k}: words absent from the candidate data {extra}: rephrase with the candidate's own words")
             return probs
 
         ans, probs, corrections = ask_with_corrections(client, CV_PROMPT, payload, check_header, purpose="cv_header",
@@ -438,7 +461,7 @@ class Agent(BaseAgent):
                          "detail": "whole PDF text: " + "; ".join(facts)[:300]})
 
         # ---- cover letter when the offer asks for it (or on request)
-        letter_ref, letter_note = None, "not asked by the offer"
+        letter_ref, letter_note = None, "non demandée par l'offre"
         asked = ctx.params.get("letter") or any(t in fold(offer["description"]) for t in
                                                  (fold(x) for x in ctx.config["cv"]["letter_triggers"]))
         if asked:
@@ -466,11 +489,11 @@ class Agent(BaseAgent):
                 (folder / "letter.txt").write_text("\n\n".join(la["paragraphs"]), encoding="utf-8")
                 lok, llog = compile_tex(ctx, folder, "letter")
                 letter_ref = str(folder / ("letter.pdf" if lok else "letter.txt"))
-                letter_note = "written" + ("" if lok else f" (PDF failed: {llog[-120:]})")
+                letter_note = "rédigée" + ("" if lok else f" (échec du PDF : {llog[-120:]})")
                 outcomes.append({"check": "LETTER_FACTS_FROM_PROFILE", "item": oid,
                                  "outcome": "corrected" if lc else "pass", "detail": f"{lc} correction(s)"})
             else:
-                letter_note = "not written: " + "; ".join(lp)[:200]
+                letter_note = "non rédigée : " + "; ".join(lp)[:200]
                 warnings.append("cover letter asked but not written: " + "; ".join(lp)[:150])
                 outcomes.append({"check": "LETTER_FACTS_FROM_PROFILE", "item": oid, "outcome": "kept_despite",
                                  "detail": letter_note})
@@ -481,30 +504,33 @@ class Agent(BaseAgent):
             if score["missing"]:
                 vigilance.append(f"Compétences demandées absentes de ton profil : {', '.join(score['missing'])}.")
             if score["eliminated"]:
-                vigilance.append(f"Offre éliminée par le score : {', '.join(score['elimination_reasons'])}.")
+                fr = ctx.words["ui_text"]["fr"]
+                why = [fr.get(ctx.words["elimination_reasons"].get(e, e), e) for e in score["elimination_reasons"]]
+                vigilance.append("Offre éliminée par le score : " + " ".join(why))
             sal = score["components"]["notes"].get("salary")
-            if sal == "salary unknown":
+            if sal == "salaire non communiqué":
                 vigilance.append("Salaire non communiqué.")
         if dec:
             d = dec["user_override"] or dec["decision"]
             if d != "keep" or dec["reason_code"] not in ("NO_REQUIREMENT", "JUNIOR_SIGNAL", "YEARS_WITHIN_LIMIT"):
-                vigilance.append(f"Expérience : {d} ({dec['reason_code']}) — {dec['reason']}"
+                verdict = {"keep": "compatible", "review": "à vérifier", "reject": "rejetée"}.get(d, d)
+                vigilance.append(f"Expérience {verdict} : {dec['reason']}"
                                  + (f" « {dec['source_sentence']} »" if dec["source_sentence"] else ""))
-        vigilance += [f"Contrôle {o['check']} : {o['detail']}" for o in outcomes if o["outcome"] == "kept_despite"]
+        vigilance += [f"Contrôle {o['check']} non satisfait : {o['detail']}" for o in outcomes if o["outcome"] == "kept_despite"]
         changed = [k for k in ("headline", "tagline", "summary")
                    if header[k] != {"headline": ident["headline_variants"][0], "tagline": ident.get("tagline_variants", [""])[0],
                                     "summary": profile["summary_variants"][0]}[k]]
-        md = [f"# Paquet de candidature — {offer['title']} · {offer['company']}", "",
+        md = [f"# {offer['title']} · {offer['company']}", "",
               f"- Offre : {offer['url']}", f"- Lieu : {offer.get('location') or '?'} · contrat : {offer.get('contract') or '?'}",
-              f"- Score : {score['score']:.0f}" if score else "- Score : non calculé",
-              f"- CV : cv.pdf ({pages} page(s)) · texte ATS : cv.txt", f"- Lettre : {letter_note}",
+              f"- Score : {score['score']:.0f} sur 100" if score else "- Score : non calculé",
+              f"- CV : {pages} page, texte lisible par les logiciels de tri", f"- Lettre de motivation : {letter_note}",
               "", "## Fiche entreprise", ""] + company_lines(ctx, offer["company"]) + ["",
               "## Points de vigilance", ""] + [f"- {v}" for v in vigilance or ["Aucun."]] + [
               "", "## Ce que le modèle a adapté (à relire)", ""] + (
-              [f"- {k} : {header[k]}" for k in changed] or ["- Rien : tes formulations d'origine."]) + [
+              [f"- {LABELS_FR[k]} : {header[k]}" for k in changed] or ["- Rien : tes formulations d'origine."]) + [
               "", "## Projets retenus (ordre)", ""] + [f"- {p['name']}" for p in kept_projects] + [
-              "", "Rien n'a été envoyé. Relis, modifie (cv.tex) et envoie toi-même ; marque ensuite la candidature "
-              "« envoyée » sur la page de l'offre."]
+              "", "## Et maintenant", "", "Rien n'a été envoyé. Relis le CV, modifie-le si besoin (fichier cv.tex), envoie ta "
+              "candidature toi-même, puis clique sur « Marquer comme envoyée » sur la page de l'offre."]
         (folder / "package.md").write_text("\n".join(md) + "\n", encoding="utf-8")
         (folder / "checks.json").write_text(json.dumps({"outcomes": outcomes, "fit_attempts": attempts}, ensure_ascii=False,
                                                        indent=1), encoding="utf-8")

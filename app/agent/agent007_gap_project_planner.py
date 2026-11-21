@@ -156,12 +156,12 @@ class Agent(BaseAgent):
         brief_id = "b_" + sha(f"{skill}:{today}", 12)
         ctx.run_dir.mkdir(parents=True, exist_ok=True)
         path = ctx.run_dir / f"brief_{re.sub(r'[^a-z0-9]+', '_', fold(skill))}.md"
-        md = [f"# {ans['title']}", "", f"Compétence visée : **{skill}** (manquante dans {len(offers)} offres favorables sur "
-              f"{cfg['window_days']} jours)", "", "## Objectif", "", ans["objective"], "",
+        md = [f"# {ans['title']}", "", f"Compétence visée : **{skill}**, demandée dans {len(offers)} offre(s) favorable(s) sur les "
+              f"{cfg['window_days']} derniers jours", "", "## Objectif", "", ans["objective"], "",
               f"S'appuie sur : {', '.join(ans['builds_on'])}", "", "## Architecture", "", ans["architecture"], "",
               "## Matériel", ""] + [f"- {h}" for h in ans["hardware"]] + ["", "## Logiciels", ""] + [
               f"- {s}" for s in ans["software"]] + ["", "## Étapes et jalons", ""] + [
-              f"- **{st.get('days')}** — {st.get('milestone')} → {st.get('deliverable')}" for st in ans["steps"]] + [
+              f"- **{st.get('days')}** : {st.get('milestone')} (livrable : {st.get('deliverable')})" for st in ans["steps"]] + [
               "", "## Critères de réussite", ""] + [f"- {x}" for x in ans["success_criteria"]] + ["", "## Pièges", ""] + [
               f"- {x}" for x in ans["pitfalls"]] + ["", "## Le présenter en entretien", "", ans["interview_pitch"], "",
               "Offres concernées :"] + [f"- {t}" for t in titles]

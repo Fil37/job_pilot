@@ -184,5 +184,19 @@ def test_registry_match_confidence():
     assert company_key("Groupe SII SAS") == "sii"
 
 
+def test_unreachable_registry_is_a_retrieval_error_retried_later():
+    """Incident 2026-11-21 (check RETRIEVAL_ERROR_NOT_MISSING): a network error on Serma Ingénierie was written
+    'entreprise non trouvée'. Expected: kind retrieval_error, and the sheet is retried at the next run."""
+    from conftest import FakeWeb, env_vars, ft_offer
+    web = FakeWeb(ft=[ft_offer(1, company="Serma Ingénierie")], fail=("recherche-entreprises",))
+    with env_vars(FT_CLIENT_ID="id", FT_CLIENT_SECRET="secret-long-enough"):
+        orch = make_orch(transport=web)
+        orch.run("daily")
+    c = sqlite3.connect(orch.db_path)
+    facts = json.loads(c.execute("SELECT facts FROM companies").fetchone()[0])
+    assert any(f["kind"] == "retrieval_error" for f in facts) and not any("non trouvée" in f["value"] for f in facts)
+    assert c.execute("SELECT updated_at FROM companies").fetchone()[0].startswith("1970")
+
+
 if __name__ == "__main__":
     run_main(globals())

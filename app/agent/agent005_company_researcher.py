@@ -42,6 +42,12 @@ AGENT_ID = "agent005"
 UNKNOWN = {"entreprise non communiquee", ""}
 
 
+def fr_date(iso: str | None) -> str:
+    """'2020-01-21' → '21/01/2020' (French reading); unknown stays '?'."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", iso or "")
+    return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else (iso or "?")
+
+
 def company_key(name: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9& ]+", " ", re.sub(LEGAL, " ", fold(name)))).strip()
 
@@ -118,6 +124,11 @@ class Agent(BaseAgent):
             except SourceError as exc:
                 best, conf = None, 0.0
                 errors.append({"category": exc.category, "message": f"registry {name}: {exc}"})
+                # RETRIEVAL_ERROR_NOT_MISSING (real case 2026-11-21: a network error on Serma Ingénierie was written
+                # "entreprise non trouvée"): an unreachable registry is a retrieval error, retried at the next run.
+                facts.append({"label": "Registre", "value": "indisponible lors de ce passage, nouvel essai au prochain",
+                              "kind": "retrieval_error", "source": src})
+                row["updated_at"] = "1970-01-01T00:00:00+00:00"
             if best:
                 kind = "verified_fact" if conf >= 0.6 else "hypothesis"
                 outcomes.append({"check": "COMPANY_MATCH_CONFIDENCE", "item": key,
@@ -134,17 +145,17 @@ class Agent(BaseAgent):
                            match_confidence=conf)
                 facts += [
                     {"label": "Raison sociale", "value": f"{best.get('nom_complet')} (SIREN {best.get('siren')})", "kind": kind, "source": fiche},
-                    {"label": "Activité", "value": f"{ctx.words['naf_sections'].get(section, section)} — NAF {best.get('activite_principale')}", "kind": kind, "source": fiche},
+                    {"label": "Activité", "value": f"{ctx.words['naf_sections'].get(section, section)} (NAF {best.get('activite_principale')})", "kind": kind, "source": fiche},
                     {"label": "Effectif", "value": f"{ctx.words['size_bands'].get(size, size)} salariés ({best.get('annee_tranche_effectif_salarie') or '?'})", "kind": kind, "source": fiche},
                     {"label": "Catégorie", "value": best.get("categorie_entreprise") or "?", "kind": kind, "source": fiche},
-                    {"label": "Création", "value": best.get("date_creation") or "?", "kind": kind, "source": fiche},
+                    {"label": "Création", "value": fr_date(best.get("date_creation")), "kind": kind, "source": fiche},
                     {"label": "Siège", "value": siege.get("adresse") or "?", "kind": kind, "source": fiche},
                     {"label": "Établissements ouverts", "value": str(best.get("nombre_etablissements_ouverts") or "?"), "kind": kind, "source": fiche}]
-                people = [f"{(d.get('prenoms') or '').split(' ')[0]} {d.get('nom')} — {d.get('qualite')}"
+                people = [f"{(d.get('prenoms') or '').split(' ')[0].title()} {(d.get('nom') or '').title()}, {d.get('qualite')}"
                           for d in best.get("dirigeants") or [] if d.get("type_dirigeant") == "personne physique" and d.get("nom")][:3]
                 if people:
                     facts.append({"label": "Dirigeants (registre public)", "value": " ; ".join(people), "kind": kind, "source": fiche})
-            else:
+            elif not any(f["kind"] == "retrieval_error" for f in facts):
                 facts.append({"label": "Registre", "value": "entreprise non trouvée", "kind": "missing", "source": src})
             # Wikipedia: only an article whose title matches the company name
             try:

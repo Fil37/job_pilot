@@ -160,5 +160,14 @@ def test_web_application_file_route_is_confined_and_mark_sent_needs_csrf():
     assert c.execute("SELECT status FROM offers WHERE offer_id=?", (oid,)).fetchone()[0] == "applied"
 
 
+def test_model_texts_have_no_english_long_dash():
+    """User request 2026-11-21 (check NO_EM_DASH): 'les tirets anglais là non'. The model answer is cleaned by the
+    program in every string of the JSON, lists included."""
+    from app.agent.agent006_application_builder import no_em_dash
+    ans = no_em_dash({"summary": "Ingénieur FPGA — VHDL et C", "steps": ["J1–J2", "Banc — mesures"]})
+    assert ans == {"summary": "Ingénieur FPGA, VHDL et C", "steps": ["J1-J2", "Banc, mesures"]}
+    assert "—" not in json.dumps(ans, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     run_main(globals())

@@ -118,5 +118,32 @@ def test_alerts_projects_and_publication_request():
     assert c.execute("SELECT status FROM portfolio_entries").fetchone()[0] == "demo"
 
 
+def test_documents_are_rendered_in_the_app_look_and_escaped():
+    """User request 2026-11-21 ('la page n'a pas de charte graphique dans les onglets'): a package opens in the
+    job_pilot page (panels, title, icon), not as raw text; offer text stays text (no <script>), links are clickable."""
+    from app.web.page import md_sections
+    title, secs = md_sections("# Poste FPGA · ACME\n\n- Offre : https://ex.org/a?b=1\n\n## Points de vigilance\n\n"
+                              "- <script>alert(1)</script> **important**\n")
+    assert title == "Poste FPGA · ACME" and secs[1]["title"] == "Points de vigilance"
+    h = str(secs[1]["html"])
+    assert "<script>" not in h and "&lt;script&gt;" in h and "<strong>important</strong>" in h
+    assert '<a href="https://ex.org/a?b=1" target="_blank" rel="noopener noreferrer">' in str(secs[0]["html"])
+    orch, cl = client()
+    c = sqlite3.connect(orch.db_path)
+    oid = c.execute("SELECT offer_id FROM offers").fetchone()[0]
+    pkg = orch.runs_dir / "r1" / f"application_{oid}"
+    pkg.mkdir(parents=True)
+    (pkg / "package.md").write_text("# Poste · ACME\n\n## Fiche entreprise\n\n- Effectif : 100\n")
+    with c:
+        c.execute("INSERT INTO applications VALUES ('a_1', ?, 'ready', 'r1', 'x', 'france_travail', ?, 'r1', 'now', NULL)",
+                  (oid, f"r1/application_{oid}"))
+    page = cl.get("/docs/package/a_1").data.decode()
+    assert 'class="panel doc"' in page and "<title>Poste · ACME · Job Pilot</title>" in page and 'rel="icon"' in page
+    assert cl.get("/docs/package/a_2").status_code == 404 and cl.get("/docs/other/a_1").status_code == 404
+    for f in TEMPLATES.glob("*.html"):
+        visible = re.sub(r"\{#.*?#\}", "", f.read_text(encoding="utf-8"), flags=re.S)
+        assert "—" not in visible, f.name
+
+
 if __name__ == "__main__":
     run_main(globals())

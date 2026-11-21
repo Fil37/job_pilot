@@ -385,3 +385,10 @@ dialog .dialog-body { padding: 18px; display: grid; gap: 10px; }
 
 /* job_pilot 0.1 — proposed for the kit: keep line breaks of a pasted text (offer description) */
 .pre-line { white-space: pre-line; overflow-wrap: anywhere; }
+/* job_pilot 0.3 — proposed for the kit: documents rendered from Markdown (package, brief, interview sheet) */
+.panel.doc p { margin: 0 0 10px; line-height: 1.6; }
+.panel.doc p:last-child { margin-bottom: 0; }
+.doc-list { margin: 0 0 10px; padding-left: 1.25em; list-style: disc; }
+.doc-list li { margin: 5px 0; line-height: 1.55; }
+.doc-list li::marker { color: var(--accent); }
+.panel.doc a { overflow-wrap: anywhere; }

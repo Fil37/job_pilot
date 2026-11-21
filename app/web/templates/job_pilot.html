@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ _('Home') }} — {{ labels.app_title }}</title>
+  <title>{{ _('Home') }} · {{ labels.app_title }}</title>
   <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
+  <link rel="icon" href="{{ url_for('static', filename='images/job_pilot_icon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
 </head>
 <body>
@@ -83,7 +84,7 @@
       <tbody>{% for r in digest.review %}<tr>
         <td><a href="{{ url_for('offer', offer_id=r.offer_id) }}"><strong>{{ r.title }}</strong></a><br><span class="small faint">{{ r.company }} · {{ '%.0f'|format(r.score) }}</span></td>
         <td class="small"><span class="badge partial">{{ r.reason_code }}</span><br>{{ _(reasons.get(r.reason_code, '')) }}<br><span class="faint">{{ r.reason }}</span></td>
-        <td class="small">{% if r.source_sentence %}« {{ r.source_sentence }} »{% else %}—{% endif %}</td>
+        <td class="small">{% if r.source_sentence %}« {{ r.source_sentence }} »{% else %}{{ _('none') }}{% endif %}</td>
       </tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="empty small"><span class="big">✅</span>{{ _('No offer to review.') }}</p>{% endif %}
   </section>
@@ -94,7 +95,7 @@
     <div class="scroll-box"><table><thead><tr><th>{{ _('Offer') }}</th><th>{{ _('Status') }}</th><th>{{ _('Mails') }}</th><th>CV</th></tr></thead>
       <tbody>{% for a in apps %}<tr><td><a href="{{ url_for('offer', offer_id=a.offer_id) }}"><strong>{{ a.title }}</strong></a><br><span class="small faint">{{ a.company }} · {{ a.source_id }}</span></td>
         <td><span class="badge {{ {'ready': 'partial', 'sent': 'running', 'interview': 'succeeded', 'technical_test': 'succeeded', 'offer': 'succeeded', 'rejected': 'failed'}.get(a.status, 'plain') }}">{{ _(a.status) }}</span><br><span class="small faint">{{ (a.sent_at or a.created_at)[:10] }}</span></td>
-        <td class="small">{{ _(a.last_mail) if a.last_mail else '—' }}</td><td class="small faint">{{ a.cv_version }}</td></tr>{% endfor %}</tbody></table></div>
+        <td class="small">{{ _(a.last_mail) if a.last_mail else _('none') }}</td><td class="small faint">{{ a.cv_version }}</td></tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="empty small">{{ _('No application yet.') }}</p>{% endif %}
   </section>
 
@@ -105,7 +106,7 @@
     <ul class="list">{% for b in briefs %}<li>
       <span class="badge {{ {'published': 'succeeded', 'scheduled': 'running', 'failed': 'failed', 'demo': 'partial'}.get(b.entry_status, 'plain') }}">{{ _(b.entry_status or b.status) }}</span>
       <strong>{{ b.title }}</strong><span class="small faint">{{ b.skill }} · {{ b.created_at[:10] }}{% if b.publish_at %} · {{ b.publish_at.replace('T', ' ') }}{% endif %}{% if b.expire_at %} → {{ b.expire_at.replace('T', ' ') }}{% endif %}</span>
-      <a class="button ghost small" href="{{ url_for('brief_file', brief_id=b.brief_id) }}" target="_blank" rel="noopener">{{ _('Open the brief') }}</a>
+      <a class="button ghost small" href="{{ url_for('document', kind='brief', ref=b.brief_id) }}">{{ _('Open the brief') }}</a>
       <form method="post" action="{{ url_for('brief_demo', brief_id=b.brief_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost small"{% if busy %} disabled{% endif %}>{{ _('demo') }}</button></form>
       {% if b.entry_id %}<a class="button ghost small" href="{{ url_for('portfolio_demo', entry_id=b.entry_id, name='index.html') }}" target="_blank" rel="noopener">{{ _('Open the demo') }}</a>
       {% if b.entry_status in ('demo', 'failed', 'expired') %}<form method="post" action="{{ url_for('entry_publish', entry_id=b.entry_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">

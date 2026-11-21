@@ -155,15 +155,16 @@ class Agent(BaseAgent):
                                                      ctx=ctx, max_corrections=max_corr)
                 folder.mkdir(parents=True, exist_ok=True)
                 path = folder / f"interview_{a['application_id']}.md"
-                md = [f"# Fiche d'entretien — {o['title']} · {o['company']}", "", f"- Offre : {o['url']}",
+                md = [f"# {o['title']} · {o['company']}", "", f"- Offre : {o['url']}",
                       f"- CV envoyé : {folder / 'cv.pdf'} (version {a['cv_version']})",
-                      f"- Type de retour : {sub['category']}" + (f" — date proposée : {sub['proposed_datetime']}" if sub["proposed_datetime"] else ""),
+                      f"- Type de retour : {ctx.words['ui_text']['fr'].get(sub['category'], sub['category'])}"
+                      + (f", date proposée le {sub['proposed_datetime'].replace('T', ' à ')}" if sub["proposed_datetime"] else ""),
                       "", "## Entreprise", ""] + company_lines(ctx, o["company"])
                 if ans:
                     md += ["", "## Résumé de l'offre", "", ans.get("offer_summary", ""), "", "## Questions techniques probables", ""]
-                    md += [f"- **{q.get('question', '')}** — piste : {q.get('hint', '')}" for q in ans["likely_questions"] if isinstance(q, dict)]
+                    md += [f"- **{q.get('question', '')}** Piste : {q.get('hint', '')}" for q in ans["likely_questions"] if isinstance(q, dict)]
                     md += ["", "## Tes points faibles et éléments de réponse", ""]
-                    md += [f"- **{w.get('point', '')}** — {w.get('answer_elements', '')}" for w in ans.get("weak_points") or [] if isinstance(w, dict)]
+                    md += [f"- **{w.get('point', '')}** : {w.get('answer_elements', '')}" for w in ans.get("weak_points") or [] if isinstance(w, dict)]
                     md += ["", "## Questions à poser", ""] + [f"- {q}" for q in ans.get("questions_to_ask") or []]
                     outcomes.append({"check": "SHEET_FACTS_FROM_PROFILE", "item": a["application_id"],
                                      "outcome": "corrected" if n else "pass"})
@@ -182,7 +183,7 @@ class Agent(BaseAgent):
                                "ref": str(path), "message": f"Fiche d'entretien prête : {o['title']} · {o['company']}"})
                 if sub["proposed_datetime"]:
                     if ctx.store.request_approval("create_calendar_event", a["application_id"], {
-                            "start": sub["proposed_datetime"], "minutes": 60, "summary": f"Entretien {o['company']} — {o['title']}",
+                            "start": sub["proposed_datetime"], "minutes": 60, "summary": f"Entretien {o['company']} : {o['title']}",
                             "description": f"Offre : {o['url']}", "folder": str(folder)}):
                         made["calendar_requests"] += 1
             else:

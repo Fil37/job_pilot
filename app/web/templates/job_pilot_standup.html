@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ _('Supervision') }} — {{ labels.app_title }}</title>
+  <title>{{ _('Supervision') }} · {{ labels.app_title }}</title>
   <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
+  <link rel="icon" href="{{ url_for('static', filename='images/job_pilot_icon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
 </head>
 <body>
@@ -46,8 +47,8 @@
       {% if stats %}
       <dl class="facts">
         <div><dt>{{ _('applications') }}</dt><dd>{{ stats.applications_sent }}</dd></div>
-        <div><dt>{{ _('Answer rate') }}</dt><dd>{{ '%.0f %%'|format(stats.answer_rate * 100) if stats.answer_rate is not none else '—' }}</dd></div>
-        <div><dt>{{ _('Average delay (days)') }}</dt><dd>{{ stats.avg_days_to_first_answer if stats.avg_days_to_first_answer is not none else '—' }}</dd></div>
+        <div><dt>{{ _('Answer rate') }}</dt><dd>{{ '%.0f %%'|format(stats.answer_rate * 100) if stats.answer_rate is not none else _('not yet') }}</dd></div>
+        <div><dt>{{ _('Average delay (days)') }}</dt><dd>{{ stats.avg_days_to_first_answer if stats.avg_days_to_first_answer is not none else _('not yet') }}</dd></div>
         <div><dt>{{ _('interview') }} / {{ _('rejection') }}</dt><dd>{{ stats.interviews_or_tests }} / {{ stats.rejections }}</dd></div>
       </dl>
       <div class="scroll-box mt-12"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('applications') }}</th><th>{{ _('Answered') }}</th><th>+</th><th>−</th></tr></thead>
@@ -74,9 +75,9 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title"><h2>{{ _('Agents — Health') }}</h2><button type="button" class="ghost small">{{ _('Re-check') }}</button></div>
+      <div class="panel-title"><h2>{{ _('Agents: health') }}</h2><button type="button" class="ghost small">{{ _('Re-check') }}</button></div>
       <ul class="list">
-        {% for a in agents %}<li><span class="badge {{ a.state }}">{{ _(a.state) }}</span><strong>{{ a.id }}</strong><span class="small faint">{{ a.detail or '—' }}{% if a.when %} · {{ a.when[:16].replace('T', ' ') }}{% endif %}</span></li>{% endfor %}
+        {% for a in agents %}<li><span class="badge {{ a.state }}">{{ _(a.state) }}</span><strong>{{ a.id }}</strong><span class="small faint">{{ a.detail or '' }}{% if a.when %} · {{ a.when[:16].replace('T', ' ') }}{% endif %}</span></li>{% endfor %}
       </ul>
     </section>
 
@@ -112,7 +113,7 @@
     <section class="panel">
       <div class="panel-title"><h2>{{ _('Skills') }} <span class="count">{{ (skills or [])|length }}</span></h2></div>
       <div class="scroll-box"><table><thead><tr><th>{{ _('Skill') }}</th><th>{{ _('Agent') }}</th><th>{{ _('Status') }}</th></tr></thead>
-        <tbody>{% for k in skills or [] %}<tr><td><details><summary><strong>{{ k.skill_id }}</strong> v{{ k.version }} — {{ _(k.objective or '') }}</summary>{% if k.summary %}<p class="small muted">{{ _(k.summary) }}</p>{% endif %}</details></td><td>{{ k.agent_id }}</td>
+        <tbody>{% for k in skills or [] %}<tr><td><details><summary><strong>{{ k.skill_id }}</strong> v{{ k.version }} · {{ _(k.objective or '') }}</summary>{% if k.summary %}<p class="small muted">{{ _(k.summary) }}</p>{% endif %}</details></td><td>{{ k.agent_id }}</td>
           <td><span class="badge {{ 'active' if k.status == 'active' else ('proposed' if k.status in ('proposed', 'validated') else 'plain') }}">{{ _(k.status) }}</span></td></tr>{% endfor %}</tbody></table></div>
     </section>
 

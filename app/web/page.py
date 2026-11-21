@@ -6,10 +6,14 @@ Every POST checks a CSRF token. Nothing here sends anything outside.
 """
 from __future__ import annotations
 
+import html
 import json
+import re
 import secrets
 import threading
 from pathlib import Path
+
+from markupsafe import Markup
 from urllib.parse import urlsplit
 
 from flask import abort, g, redirect, render_template, request, send_file, session, url_for
@@ -19,6 +23,53 @@ from app.agent import supervision as sv
 from app.agent.agent000_job_pilot import Orchestrator, application_params, build_digest
 
 WEB_CHAINS = ("daily", "rescore", "inbox", "weekly", "portfolio")
+LINK_RX = re.compile(r"(https?://[^\s<>()]+[^\s<>().,;:!?»])")
+
+
+def inline_md(text: str) -> str:
+    """Escape FIRST (contents of offers, mails and model answers are data), then **bold** and links."""
+    out = html.escape(text, quote=True)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+    return LINK_RX.sub(r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', out)
+
+
+def md_sections(text: str) -> tuple[str, list[dict]]:
+    """A job_pilot Markdown file → (title, [{"title", "html"}]): '## ' opens a panel, '- ' lists, blank lines split
+    paragraphs. Only the few forms job_pilot writes; everything else is plain escaped text."""
+    title, sections, cur, buf, items = "", [], {"title": "", "lines": []}, [], []
+
+    def flush_par():
+        if buf:
+            cur["lines"].append("<p>" + " ".join(inline_md(x) for x in buf) + "</p>")
+            buf.clear()
+
+    def flush_list():
+        if items:
+            cur["lines"].append('<ul class="doc-list">' + "".join(f"<li>{inline_md(x)}</li>" for x in items) + "</ul>")
+            items.clear()
+    for line in text.splitlines():
+        if line.startswith("# ") and not title:
+            title = line[2:].strip()
+        elif line.startswith("## "):
+            flush_par()
+            flush_list()
+            if cur["lines"] or cur["title"]:
+                sections.append(cur)
+            cur = {"title": line[3:].strip(), "lines": []}
+        elif line.startswith("- "):
+            flush_par()
+            items.append(line[2:])
+        elif not line.strip():
+            flush_par()
+            flush_list()
+        else:
+            flush_list()
+            buf.append(line.strip())
+    flush_par()
+    flush_list()
+    if cur["lines"] or cur["title"]:
+        sections.append(cur)
+    return title, [{"title": c["title"], "html": Markup("".join(c["lines"]))} for c in sections]
 _run_lock = threading.Lock()
 
 
@@ -327,6 +378,32 @@ def register(app, orch: Orchestrator) -> None:
             abort(404)
         mime = {"pdf": "application/pdf"}.get(name.rsplit(".", 1)[1], "text/plain; charset=utf-8")
         return send_file(path, mimetype=mime)
+
+    # ------------------------------------------------------------------ documents in the application's look
+    @app.get("/docs/<kind>/<ref>")
+    def document(kind: str, ref: str):
+        """Package, project brief or interview sheet rendered in the job_pilot page (instead of raw text)."""
+        queries = {"package": "SELECT package_ref || '/package.md', offer_id FROM applications WHERE application_id=?",
+                   "brief": "SELECT path, NULL FROM project_briefs WHERE brief_id=?",
+                   "sheet": "SELECT s.path, a.offer_id FROM interview_sheets s JOIN applications a USING(application_id) "
+                            "WHERE s.sheet_id=?"}
+        if kind not in queries:
+            abort(404)
+        with db_connect(orch.db_path) as c:
+            row = c.execute(queries[kind], (ref,)).fetchone()
+        if not row or not row[0]:
+            abort(404)
+        base = orch.runs_dir.resolve()
+        path = (Path(row[0]) if kind != "package" else base / row[0]).resolve()
+        if base not in path.parents or not path.is_file():
+            abort(404)
+        title, sections = md_sections(path.read_text(encoding="utf-8"))
+        files = []
+        if kind == "package":
+            files = [f for f in ("cv.pdf", "letter.pdf") if (path.parent / f).is_file()]
+        doc = {"kind": kind, "ref": ref, "title": title or path.name, "sections": sections, "files": files,
+               "offer_id": row[1], "when": path.stat().st_mtime}
+        return render_template("job_pilot_page.html", doc=doc)
 
     # ------------------------------------------------------------------ supervision
     @app.get("/standup")
