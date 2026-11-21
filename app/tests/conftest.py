@@ -24,8 +24,11 @@ _busy = sv.busy_runs(DB_PATH)
 if _busy:
     raise SystemExit(f"refusing to run the tests: real run(s) in progress {_busy}")
 
-EXAMPLE_INSTANCE = json.loads((ROOT / "app/assets/job_pilot.example.json").read_text(encoding="utf-8"))
 EXAMPLE_PROFILE = ROOT / "app/assets/profile.example.yaml"
+_EXAMPLE_JSON = ROOT / "app/assets/job_pilot.example.json"
+# The harness profile (app/harness.yaml) copies only .py files and the five schemas: the example instance is read
+# when present, so test_experience.py runs in its container without app/assets/.
+EXAMPLE_INSTANCE = json.loads(_EXAMPLE_JSON.read_text(encoding="utf-8")) if _EXAMPLE_JSON.is_file() else None
 
 
 def make_instance(tmp: Path, **criteria) -> dict:

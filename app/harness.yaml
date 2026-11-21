@@ -1,0 +1,27 @@
+# job_pilot — control profile read by the harness (virtual_securehouse/harness) from the last commit.
+# Suite: the experience filter (agent003), business core with the real cases of 2026-11-21 (Datadog offers).
+# Standard library only + pytest: runs in localhost/harness-pytest:8.4.2 without network.
+# Full suite of the project (61 tests, needs flask/pyyaml): .venv/bin/python -m pytest -p no:cacheprovider app/tests
+framework: pytest
+suite: app/tests/test_experience.py
+files:
+  - app/agent/__init__.py
+  - app/agent/supervision.py
+  - app/agent/agent003_experience_filter.py
+  - app/tests/conftest.py
+  - app/tests/test_experience.py
+  - app/schemas/reports.json
+  - app/schemas/routes.json
+  - app/schemas/rows.json
+  - app/schemas/settings.json
+  - app/schemas/words.json
+tests:
+  - test_years_within_borderline_and_above
+  - test_range_counts_its_lower_bound
+  - test_hors_stage_et_alternance_lowers_the_countable_years
+  - test_user_rule_not_counting_internships
+  - test_junior_wording_and_contradictions
+  - test_senior_title_without_years_goes_to_review_not_to_the_bin
+  - test_company_facts_are_not_requirements
+  - test_real_case_datadog_staff_engineer
+  - test_preferred_years_and_two_different_requirements
