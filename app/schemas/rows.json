@@ -543,6 +543,420 @@
      "required": false
     }
    }
+  },
+  "companies": {
+   "owner": "agent005",
+   "primary_key": [
+    "company_key"
+   ],
+   "fields": {
+    "company_key": {
+     "type": "text",
+     "required": true
+    },
+    "name": {
+     "type": "text",
+     "required": true
+    },
+    "siren": {
+     "type": "text",
+     "required": false
+    },
+    "legal_name": {
+     "type": "text",
+     "required": false
+    },
+    "naf": {
+     "type": "text",
+     "required": false
+    },
+    "size_band": {
+     "type": "text",
+     "required": false
+    },
+    "size_year": {
+     "type": "text",
+     "required": false
+    },
+    "category": {
+     "type": "text",
+     "required": false
+    },
+    "created_on": {
+     "type": "text",
+     "required": false
+    },
+    "establishments_open": {
+     "type": "integer",
+     "required": false
+    },
+    "hq_city": {
+     "type": "text",
+     "required": false
+    },
+    "wikipedia_url": {
+     "type": "text",
+     "required": false
+    },
+    "wikipedia_extract": {
+     "type": "text",
+     "required": false
+    },
+    "offers_seen_30d": {
+     "type": "integer",
+     "required": false
+    },
+    "facts": {
+     "type": "json",
+     "required": true
+    },
+    "match_confidence": {
+     "type": "real",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "updated_at": {
+     "type": "text",
+     "required": true
+    }
+   },
+   "description": "Company sheet: every fact carries its source URL and kind (verified_fact / hypothesis / missing)."
+  },
+  "alerts": {
+   "owner": "agent000",
+   "primary_key": [
+    "alert_id"
+   ],
+   "fields": {
+    "alert_id": {
+     "type": "integer",
+     "required": true
+    },
+    "kind": {
+     "type": "text",
+     "required": true
+    },
+    "category": {
+     "type": "text",
+     "required": true
+    },
+    "application_id": {
+     "type": "text",
+     "required": false
+    },
+    "ref": {
+     "type": "text",
+     "required": false
+    },
+    "message": {
+     "type": "text",
+     "required": true
+    },
+    "created_at": {
+     "type": "text",
+     "required": true
+    },
+    "seen_at": {
+     "type": "text",
+     "required": false
+    }
+   },
+   "description": "Alerts returned by the agents in their envelope (data.alerts) and written by agent000 only.",
+   "autoincrement": true
+  },
+  "email_events": {
+   "owner": "agent009",
+   "primary_key": [
+    "event_id"
+   ],
+   "fields": {
+    "event_id": {
+     "type": "text",
+     "required": true
+    },
+    "thread_key": {
+     "type": "text",
+     "required": false
+    },
+    "from_address": {
+     "type": "text",
+     "required": true
+    },
+    "from_domain": {
+     "type": "text",
+     "required": true
+    },
+    "subject": {
+     "type": "text",
+     "required": true
+    },
+    "received_at": {
+     "type": "text",
+     "required": true
+    },
+    "application_id": {
+     "type": "text",
+     "required": false
+    },
+    "match_reason": {
+     "type": "text",
+     "required": false
+    },
+    "category": {
+     "type": "text",
+     "required": true
+    },
+    "confidence": {
+     "type": "real",
+     "required": true
+    },
+    "needs_check": {
+     "type": "bool",
+     "required": true
+    },
+    "proposed_datetime": {
+     "type": "text",
+     "required": false
+    },
+    "classified_by": {
+     "type": "text",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "created_at": {
+     "type": "text",
+     "required": true
+    }
+   },
+   "description": "One mail read in READ-ONLY mode: headers only + class; the body is never stored."
+  },
+  "interview_sheets": {
+   "owner": "agent010",
+   "primary_key": [
+    "sheet_id"
+   ],
+   "fields": {
+    "sheet_id": {
+     "type": "text",
+     "required": true
+    },
+    "application_id": {
+     "type": "text",
+     "required": true
+    },
+    "event_id": {
+     "type": "text",
+     "required": false
+    },
+    "path": {
+     "type": "text",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "created_at": {
+     "type": "text",
+     "required": true
+    }
+   }
+  },
+  "followup_drafts": {
+   "owner": "agent010",
+   "primary_key": [
+    "draft_id"
+   ],
+   "fields": {
+    "draft_id": {
+     "type": "text",
+     "required": true
+    },
+    "application_id": {
+     "type": "text",
+     "required": true
+    },
+    "text": {
+     "type": "text",
+     "required": true
+    },
+    "status": {
+     "type": "text",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "created_at": {
+     "type": "text",
+     "required": true
+    }
+   },
+   "description": "Drafts only: you copy and send them yourself."
+  },
+  "skill_gaps": {
+   "owner": "agent007",
+   "primary_key": [
+    "skill",
+    "window_end"
+   ],
+   "fields": {
+    "skill": {
+     "type": "text",
+     "required": true
+    },
+    "window_end": {
+     "type": "text",
+     "required": true
+    },
+    "offers_count": {
+     "type": "integer",
+     "required": true
+    },
+    "offer_ids": {
+     "type": "json",
+     "required": true
+    },
+    "covered": {
+     "type": "bool",
+     "required": true
+    },
+    "triggered": {
+     "type": "bool",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    }
+   }
+  },
+  "project_briefs": {
+   "owner": "agent007",
+   "primary_key": [
+    "brief_id"
+   ],
+   "fields": {
+    "brief_id": {
+     "type": "text",
+     "required": true
+    },
+    "skill": {
+     "type": "text",
+     "required": true
+    },
+    "title": {
+     "type": "text",
+     "required": true
+    },
+    "brief": {
+     "type": "json",
+     "required": true
+    },
+    "path": {
+     "type": "text",
+     "required": true
+    },
+    "status": {
+     "type": "text",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "created_at": {
+     "type": "text",
+     "required": true
+    }
+   }
+  },
+  "portfolio_entries": {
+   "owner": "agent008",
+   "primary_key": [
+    "entry_id"
+   ],
+   "fields": {
+    "entry_id": {
+     "type": "text",
+     "required": true
+    },
+    "brief_id": {
+     "type": "text",
+     "required": true
+    },
+    "slug": {
+     "type": "text",
+     "required": true
+    },
+    "demo_path": {
+     "type": "text",
+     "required": true
+    },
+    "status": {
+     "type": "text",
+     "required": true
+    },
+    "publish_at": {
+     "type": "text",
+     "required": false
+    },
+    "expire_at": {
+     "type": "text",
+     "required": false
+    },
+    "commit_sha": {
+     "type": "text",
+     "required": false
+    },
+    "removed_sha": {
+     "type": "text",
+     "required": false
+    },
+    "error": {
+     "type": "text",
+     "required": false
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "updated_at": {
+     "type": "text",
+     "required": true
+    }
+   }
+  },
+  "metrics_snapshots": {
+   "owner": "agent011",
+   "primary_key": [
+    "snapshot_id"
+   ],
+   "fields": {
+    "snapshot_id": {
+     "type": "text",
+     "required": true
+    },
+    "metrics": {
+     "type": "json",
+     "required": true
+    },
+    "run_id": {
+     "type": "text",
+     "required": true
+    },
+    "created_at": {
+     "type": "text",
+     "required": true
+    }
+   }
   }
  }
 }

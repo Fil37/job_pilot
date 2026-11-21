@@ -26,6 +26,8 @@ import argparse
 import importlib
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -55,6 +57,13 @@ ALLOWED_MODULES = {
     "agent011": "app.agent.agent011_pipeline_analyst",
 }
 SKILL_FIELDS = ("skill_id", "version", "status", "objective", "summary")
+# Sensitive actions applied only after YOUR approval: action → (agent module, handler function). routes.json lists them.
+APPROVAL_HANDLERS = {
+    "create_calendar_event": ("agent010", "approve_calendar"),
+    "send_followup": ("agent010", "approve_followup"),
+    "publish_portfolio_entry": ("agent008", "approve_publish"),
+    "apply_scoring_weights": ("agent011", "approve_weights"),
+}
 FINAL = ("succeeded", "partial", "failed", "skipped", "not_run", "blocked", "cancelled")
 
 
@@ -153,6 +162,31 @@ class Orchestrator:
                           instance=self.instance, store=self.store, run_dir=self.runs_dir / run_id, budget=budget,
                           previous=previous, params=params or {}, transport=self.transport)
 
+    def decide(self, approval_id: int, approve: bool) -> dict:
+        """Your decision on a pending approval; the handler of the action is the only code that applies it."""
+        handlers = {a: (lambda target, params, m=m, f=f: getattr(self.registry.module(m), f)(self, target, params))
+                    for a, (m, f) in APPROVAL_HANDLERS.items()}
+        return self.store.decide(approval_id, approve, handlers)
+
+    def _write_alerts(self, env: dict) -> None:
+        """Alerts returned by an agent (data.alerts) are written by agent000 only; immediate ones also go to the
+        desktop notification when notify-send exists (local, nothing leaves the machine)."""
+        alerts = (env.get("data") or {}).get("alerts") or []
+        if not alerts:
+            return
+        with db_connect(self.db_path) as c:
+            for a in alerts:
+                upsert(c, self.schemas["rows"], "alerts", {"kind": a["kind"], "category": a["category"],
+                       "application_id": a.get("application_id"), "ref": a.get("ref"), "message": a["message"][:400],
+                       "created_at": utc_now(), "seen_at": None})
+        exe = shutil.which("notify-send")
+        for a in alerts:
+            if exe and a["kind"] == "immediate":
+                try:
+                    subprocess.run([exe, "job_pilot", a["message"][:200]], timeout=5, check=False)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+
     def busy(self) -> list[str]:
         return sv.busy_runs(self.db_path)
 
@@ -233,6 +267,7 @@ class Orchestrator:
             ctx = self._ctx(run_id, task_id, previous, (params or {}).get(aid) or (params or {}).get("*"), budget)
             env = self._run_agent(aid, ctx)
             self._save_result(env)
+            self._write_alerts(env)
             previous[aid] = env
             statuses[aid] = env["status"]
             detail = "; ".join(e["message"] for e in env["errors"])[:400] or ", ".join(
@@ -344,6 +379,12 @@ def digest_markdown(d: dict) -> str:
 
 
 # =========================================================================== command line
+def application_params(offer_id: str, letter: bool = False) -> dict:
+    """APPLICATION_PARAMS (case 2026-11-21: only agent006 received the offer, agent005 researched the top of the
+    day instead of the offer's company): every agent of the application chain gets the offer."""
+    return {"agent005": {"offer_id": offer_id}, "agent006": {"offer_id": offer_id, "letter": letter}}
+
+
 def run_standalone(agent_id: str) -> int:
     """`python -m app.agent.agentNNN_x [--offer ID]` : run one agent alone (its run is recorded like any other)."""
     return main(["--only", agent_id] + sys.argv[1:])
@@ -373,7 +414,7 @@ def main(argv=None) -> int:
         print("A run is already in progress.", file=sys.stderr)
         return 3
     try:
-        params = {"agent006": {"offer_id": a.offer, "letter": a.letter}} if a.offer else None
+        params = application_params(a.offer, a.letter) if a.offer else None
         report = orch.run(a.chain, only=a.only, skip=a.skip, params=params)
     except ConfigError as exc:
         print(f"CONFIG ERROR: {exc}", file=sys.stderr)

@@ -85,6 +85,23 @@
   </section>
   </div>
 
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Company sheet') }}</h2>{% if company %}<span class="chip">{{ company.updated_at[:10] }}</span>{% endif %}</div>
+    {% if company %}
+    {% if company.confidence < 0.6 %}<p class="alert">{{ _('to check') }} : {{ company.confidence }}</p>{% endif %}
+    <dl class="facts">{% for f in company.facts %}<div><dt>{{ f.label }}{% if f.kind != 'verified_fact' %} ({{ f.kind }}){% endif %}</dt><dd>{% if f.source.startswith('http') %}<a href="{{ f.source }}" target="_blank" rel="noopener noreferrer">{{ f.value }}</a>{% else %}{{ f.value }}{% endif %}</dd></div>{% endfor %}</dl>
+    {% else %}<p class="empty small">{{ _('Not decided yet.') }}</p>{% endif %}
+  </section>
+
+  {% if mails or sheets or drafts %}
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Mails') }} <span class="count">{{ mails|length }}</span></h2></div>
+    <ul class="list">{% for m in mails %}<li><span class="badge {{ 'partial' if m.needs_check else 'succeeded' }}">{{ _(m.category) }}</span><strong>{{ m.subject }}</strong><span class="small faint">{{ m.from_domain }} · {{ m.received_at[:16].replace('T', ' ') }} · {{ '%.0f'|format(m.confidence * 100) }} %{% if m.proposed_datetime %} · {{ m.proposed_datetime.replace('T', ' ') }}{% endif %}</span></li>{% endfor %}</ul>
+    {% for sh in sheets %}<details class="mt-12"><summary><strong>{{ _('Interview sheet') }}</strong></summary><div class="scroll-box tall"><p class="small pre-line">{{ sh.text }}</p></div></details>{% endfor %}
+    {% for dr in drafts %}<details class="mt-12"><summary><strong>{{ _('Follow-up draft') }}</strong> <span class="badge plain">{{ dr.status }}</span></summary><p class="small pre-line">{{ dr.text }}</p></details>{% endfor %}
+  </section>
+  {% endif %}
+
   {% for a in apps %}
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Application package') }}</h2><span class="badge {{ 'succeeded' if a.status != 'ready' else 'partial' }}">{{ _(a.status) }}</span></div>

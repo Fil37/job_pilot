@@ -26,7 +26,8 @@ def tasks(orch, run_id):
 
 
 def test_daily_chain_end_to_end():
-    """Case: the daily chain with fake sources: 4 agents ran, agent005 (disabled) is 'skipped' not absent; the
+    """Case: the daily chain with fake sources: the 5 agents ran (agent005 enabled since 2026-11-21: its company
+    sheets say 'not found' with the fake registry); the
     report has every field of reports.json, the digest lists the kept offer and its file exists."""
     with env_vars(**FT_KEYS):
         orch = make_orch(transport=daily_web(), target_companies=[{"name": "ACME", "greenhouse": "acme"}])
@@ -34,7 +35,7 @@ def test_daily_chain_end_to_end():
     assert r["status"] == "succeeded", r
     t = tasks(orch, r["run_id"])
     assert t == {"agent001": "succeeded", "agent002": "succeeded", "agent003": "succeeded", "agent004": "succeeded",
-                 "agent005": "skipped"}
+                 "agent005": "succeeded"}
     assert r["results"]["agent003"] == {**r["results"]["agent003"], "keep": 2, "reject": 1}
     top = r["digest"]["top"]
     assert [o["company"] for o in top] == ["ACME SAS"]        # Gamma: Lyon is outside the areas → eliminated
@@ -42,7 +43,7 @@ def test_daily_chain_end_to_end():
     saved = json.loads((orch.runs_dir / r["run_id"] / "report.json").read_text())
     assert saved["run_id"] == r["run_id"] and saved["costs"]["calls"] == 0
     with sqlite3.connect(orch.db_path) as c:
-        assert c.execute("SELECT COUNT(*) FROM agent_results WHERE run_id=?", (r["run_id"],)).fetchone()[0] == 4
+        assert c.execute("SELECT COUNT(*) FROM agent_results WHERE run_id=?", (r["run_id"],)).fetchone()[0] == 5
         assert c.execute("SELECT status FROM sup_runs WHERE run_id=?", (r["run_id"],)).fetchone()[0] == "succeeded"
     assert orch.store.health()["agent003"] == "healthy"
 

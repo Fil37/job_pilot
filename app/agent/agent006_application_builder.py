@@ -245,6 +245,21 @@ def ats_problems(text: str, must: list[str]) -> list[str]:
     return out
 
 
+def company_lines(ctx: RunContext, name: str) -> list[str]:
+    """The company sheet of agent005 (each fact with its kind and source), or 'missing'."""
+    from app.agent.agent005_company_researcher import company_key
+    with ctx.connect() as c:
+        row = c.execute("SELECT facts, match_confidence FROM companies WHERE company_key=?", (company_key(name),)).fetchone()
+    if not row:
+        return ["- information absente (pas de fiche pour cette entreprise)"]
+    out = [] if row[1] >= 0.6 else [f"- ⚠ correspondance incertaine avec le registre ({row[1]}) : à vérifier"]
+    for f in json.loads(row[0]):
+        tag = {"verified_fact": "", "hypothesis": " (hypothèse)", "missing": " (absent)"}.get(f["kind"], "")
+        src = f" — {f['source']}" if f["source"].startswith("http") else ""
+        out.append(f"- {f['label']}{tag} : {f['value']}{src}")
+    return out
+
+
 # =========================================================================== agent
 class Agent(BaseAgent):
     AGENT_ID = AGENT_ID
@@ -483,7 +498,7 @@ class Agent(BaseAgent):
               f"- Offre : {offer['url']}", f"- Lieu : {offer.get('location') or '?'} · contrat : {offer.get('contract') or '?'}",
               f"- Score : {score['score']:.0f}" if score else "- Score : non calculé",
               f"- CV : cv.pdf ({pages} page(s)) · texte ATS : cv.txt", f"- Lettre : {letter_note}",
-              "- Fiche entreprise : information absente (agent005 pas encore construit)", "",
+              "", "## Fiche entreprise", ""] + company_lines(ctx, offer["company"]) + ["",
               "## Points de vigilance", ""] + [f"- {v}" for v in vigilance or ["Aucun."]] + [
               "", "## Ce que le modèle a adapté (à relire)", ""] + (
               [f"- {k} : {header[k]}" for k in changed] or ["- Rien : tes formulations d'origine."]) + [

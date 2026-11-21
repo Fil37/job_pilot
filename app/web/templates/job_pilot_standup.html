@@ -40,6 +40,23 @@
       {% else %}<p class="empty small"><span class="big">☕</span>{{ _('Nothing running.') }}</p>{% endif %}
     </section>
 
+    {# ---- job_pilot: statistics of the job search (agent011) #}
+    <section class="panel span-2">
+      <div class="panel-title"><h2>{{ _('Statistics') }}</h2>{% if stats %}<span class="chip">{{ stats.computed_at[:16].replace('T', ' ') }}</span>{% endif %}</div>
+      {% if stats %}
+      <dl class="facts">
+        <div><dt>{{ _('applications') }}</dt><dd>{{ stats.applications_sent }}</dd></div>
+        <div><dt>{{ _('Answer rate') }}</dt><dd>{{ '%.0f %%'|format(stats.answer_rate * 100) if stats.answer_rate is not none else '—' }}</dd></div>
+        <div><dt>{{ _('Average delay (days)') }}</dt><dd>{{ stats.avg_days_to_first_answer if stats.avg_days_to_first_answer is not none else '—' }}</dd></div>
+        <div><dt>{{ _('interview') }} / {{ _('rejection') }}</dt><dd>{{ stats.interviews_or_tests }} / {{ stats.rejections }}</dd></div>
+      </dl>
+      <div class="scroll-box mt-12"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('applications') }}</th><th>{{ _('Answered') }}</th><th>+</th><th>−</th></tr></thead>
+        <tbody>{% for k, g2 in stats.by_source.items() %}<tr><td>{{ k }}</td><td>{{ g2.sent }}</td><td>{{ g2.answered }}</td><td>{{ g2.positive }}</td><td>{{ g2.negative }}</td></tr>{% endfor %}
+        {% for k, g2 in stats.by_family.items() %}<tr><td class="faint">{{ k }}</td><td>{{ g2.sent }}</td><td>{{ g2.answered }}</td><td>{{ g2.positive }}</td><td>{{ g2.negative }}</td></tr>{% endfor %}</tbody></table></div>
+      {% if stats.weights_note %}<p class="hint mt-12">{{ stats.weights_note }}</p>{% endif %}
+      {% else %}<p class="empty small">{{ _('No collection yet.') }}</p>{% endif %}
+    </section>
+
     {# ---- job_pilot: journal of the sources really queried by the last collection (agent002) #}
     <section class="panel span-2">
       <div class="panel-title"><h2>{{ _('Sources queried') }} <span class="count">{{ sources|length }}</span></h2></div>

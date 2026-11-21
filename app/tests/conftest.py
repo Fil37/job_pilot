@@ -78,6 +78,10 @@ class FakeWeb:
             return 200, json.dumps({"jobs": self.gh.get(token, [])})
         if "lever.co" in url:
             return 200, "[]"
+        if "recherche-entreprises" in url:          # agent005: company registry (nothing found)
+            return 200, json.dumps({"results": []})
+        if "wikipedia.org" in url:
+            return 200, json.dumps({"query": {"search": []}})
         return 404, "not found"
 
 

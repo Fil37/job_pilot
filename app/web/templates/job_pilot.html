@@ -49,6 +49,18 @@
     {% if busy %}<p class="status running">{{ _('A run is in progress.') }}</p>{% endif %}
   </section>
 
+  <section class="panel" id="alerts">
+    <div class="panel-title"><h2>{{ _('Alerts') }} <span class="count">{{ alerts|length }}</span></h2>
+      <form method="post" action="{{ url_for('start_run') }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button name="chain" value="inbox" class="ghost small"{% if busy %} disabled{% endif %}>✉ {{ _('Run the inbox check') }}</button>
+        <button name="chain" value="weekly" class="ghost small"{% if busy %} disabled{% endif %}>Σ {{ _('Run the weekly analysis') }}</button></form></div>
+    {% if alerts %}
+    <ul class="list">{% for a in alerts %}<li><span class="badge {{ 'running' if a.kind == 'immediate' else 'plain' }}">{{ _(a.category) }}</span><span>{{ a.message }}</span>
+      <span class="small faint">{{ a.created_at[:16].replace('T', ' ') }}</span>
+      <form method="post" action="{{ url_for('alert_seen', alert_id=a.alert_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost small">✓ {{ _('Mark as seen') }}</button></form></li>{% endfor %}</ul>
+    {% else %}<p class="empty small"><span class="big">🔕</span>{{ _('No alert.') }}</p>{% endif %}
+  </section>
+
   <section class="panel">
     <div class="panel-title"><h2>{{ _("Today's best offers") }} <span class="count">{{ digest.top|length }}</span></h2></div>
     {% if digest.top %}
@@ -74,6 +86,34 @@
         <td class="small">{% if r.source_sentence %}« {{ r.source_sentence }} »{% else %}—{% endif %}</td>
       </tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="empty small"><span class="big">✅</span>{{ _('No offer to review.') }}</p>{% endif %}
+  </section>
+
+  <section class="panel" id="applications">
+    <div class="panel-title"><h2>{{ _('Applications') }} <span class="count">{{ apps|length }}</span></h2></div>
+    {% if apps %}
+    <div class="scroll-box"><table><thead><tr><th>{{ _('Offer') }}</th><th>{{ _('Status') }}</th><th>{{ _('Mails') }}</th><th>CV</th></tr></thead>
+      <tbody>{% for a in apps %}<tr><td><a href="{{ url_for('offer', offer_id=a.offer_id) }}"><strong>{{ a.title }}</strong></a><br><span class="small faint">{{ a.company }} · {{ a.source_id }}</span></td>
+        <td><span class="badge {{ {'ready': 'partial', 'sent': 'running', 'interview': 'succeeded', 'technical_test': 'succeeded', 'offer': 'succeeded', 'rejected': 'failed'}.get(a.status, 'plain') }}">{{ _(a.status) }}</span><br><span class="small faint">{{ (a.sent_at or a.created_at)[:10] }}</span></td>
+        <td class="small">{{ _(a.last_mail) if a.last_mail else '—' }}</td><td class="small faint">{{ a.cv_version }}</td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="empty small">{{ _('No application yet.') }}</p>{% endif %}
+  </section>
+
+  <section class="panel" id="projects">
+    <div class="panel-title"><h2>{{ _('Project ideas') }} <span class="count">{{ briefs|length }}</span></h2>
+      {% if gaps %}<span class="tags">{% for gp in gaps %}<span class="chip">{{ gp.skill }} · {{ gp.offers_count }}{% if gp.triggered %} ★{% endif %}</span>{% endfor %}</span>{% endif %}</div>
+    {% if briefs %}
+    <ul class="list">{% for b in briefs %}<li>
+      <span class="badge {{ {'published': 'succeeded', 'scheduled': 'running', 'failed': 'failed', 'demo': 'partial'}.get(b.entry_status, 'plain') }}">{{ _(b.entry_status or b.status) }}</span>
+      <strong>{{ b.title }}</strong><span class="small faint">{{ b.skill }} · {{ b.created_at[:10] }}{% if b.publish_at %} · {{ b.publish_at.replace('T', ' ') }}{% endif %}{% if b.expire_at %} → {{ b.expire_at.replace('T', ' ') }}{% endif %}</span>
+      <a class="button ghost small" href="{{ url_for('brief_file', brief_id=b.brief_id) }}" target="_blank" rel="noopener">{{ _('Open the brief') }}</a>
+      <form method="post" action="{{ url_for('brief_demo', brief_id=b.brief_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost small"{% if busy %} disabled{% endif %}>{{ _('demo') }}</button></form>
+      {% if b.entry_id %}<a class="button ghost small" href="{{ url_for('portfolio_demo', entry_id=b.entry_id, name='index.html') }}" target="_blank" rel="noopener">{{ _('Open the demo') }}</a>
+      {% if b.entry_status in ('demo', 'failed', 'expired') %}<form method="post" action="{{ url_for('entry_publish', entry_id=b.entry_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="small">{{ _('Publication date') }} <input type="datetime-local" name="publish_at" required></label>
+        <label class="small">{{ _('End date (optional)') }} <input type="datetime-local" name="expire_at"></label>
+        <button class="small">{{ _('Publish on the portfolio') }}</button></form>{% endif %}{% endif %}
+      {% if b.error %}<span class="small faint">{{ b.error }}</span>{% endif %}</li>{% endfor %}</ul>
+    {% else %}<p class="empty small"><span class="big">🛠</span>{{ _('No project idea yet.') }}</p>{% endif %}
   </section>
 
   <section class="panel">

@@ -9,15 +9,16 @@ from __future__ import annotations
 import json
 import secrets
 import threading
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from flask import abort, g, redirect, render_template, request, send_file, session, url_for
 
 from app.agent import db_connect, utc_now
 from app.agent import supervision as sv
-from app.agent.agent000_job_pilot import Orchestrator, build_digest
+from app.agent.agent000_job_pilot import Orchestrator, application_params, build_digest
 
-WEB_CHAINS = ("daily", "rescore")
+WEB_CHAINS = ("daily", "rescore", "inbox", "weekly", "portfolio")
 _run_lock = threading.Lock()
 
 
@@ -44,13 +45,19 @@ def register(app, orch: Orchestrator) -> None:
     @app.context_processor
     def inject():
         theme = request.cookies.get("theme")
-        return {"labels": {"app_title": "Job Pilot", "version": "v0.2", "css_file": "job_pilot_master.css"},
+        return {"labels": {"app_title": "Job Pilot", "version": "v0.3", "css_file": "job_pilot_master.css"},
                 "lang": g.lang, "theme": theme if theme in ("light", "dark") else "auto", "_": translate,
                 "csrf": session.get("csrf"), "csp_nonce": g.csp_nonce, "error": None,
                 "reasons": words["experience_reasons"], "elim": words["elimination_reasons"]}
 
     @app.after_request
     def security(resp):
+        if g.get("demo_page"):
+            resp.headers["Content-Security-Policy"] = ("default-src 'self'; img-src 'self' data: https:; "
+                                                       "style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; "
+                                                       "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
+            resp.headers["X-Content-Type-Options"] = "nosniff"
+            return resp
         resp.headers["Content-Security-Policy"] = ("default-src 'self'; img-src 'self' data:; style-src 'self'; "
                                                    f"script-src 'self' 'nonce-{g.get('csp_nonce', '')}'; "
                                                    "form-action 'self'; frame-ancestors 'none'")
@@ -91,9 +98,87 @@ def register(app, orch: Orchestrator) -> None:
             last = c.execute("SELECT * FROM sup_runs ORDER BY created_at DESC LIMIT 1").fetchone()
             last = dict(last) if last else None
             prof = c.execute("SELECT summary FROM profile_versions ORDER BY created_at DESC LIMIT 1").fetchone()
+            alerts = [dict(r) for r in c.execute("SELECT * FROM alerts WHERE seen_at IS NULL ORDER BY alert_id DESC LIMIT 30")]
+            apps = [dict(r) for r in c.execute(
+                "SELECT a.*, o.title, o.company, o.url, (SELECT category FROM email_events e WHERE e.application_id="
+                "a.application_id ORDER BY received_at DESC LIMIT 1) AS last_mail FROM applications a JOIN offers o "
+                "USING(offer_id) ORDER BY a.created_at DESC LIMIT 50")]
+            briefs = [dict(r) for r in c.execute(
+                "SELECT b.brief_id, b.skill, b.title, b.status, b.created_at, p.entry_id, p.status AS entry_status, "
+                "p.publish_at, p.expire_at, p.error FROM project_briefs b LEFT JOIN portfolio_entries p USING(brief_id) "
+                "ORDER BY b.created_at DESC LIMIT 10")]
+            gaps = [dict(r) for r in c.execute("SELECT skill, offers_count, covered, triggered FROM skill_gaps WHERE window_end="
+                                               "(SELECT MAX(window_end) FROM skill_gaps) ORDER BY offers_count DESC LIMIT 8")]
         example = bool(prof and json.loads(prof[0]).get("example"))
-        return render_template("job_pilot.html", stats=stats, digest=digest, last=last, example=example,
-                               busy=bool(orch.busy()), msg=request.args.get("msg"))
+        return render_template("job_pilot.html", stats=stats, digest=digest, last=last, example=example, alerts=alerts,
+                               apps=apps, briefs=briefs, gaps=gaps, busy=bool(orch.busy()), msg=request.args.get("msg"))
+
+    @app.post("/alerts/<int:alert_id>/seen")
+    def alert_seen(alert_id: int):
+        check_csrf()
+        with db_connect(orch.db_path) as c:
+            c.execute("UPDATE alerts SET seen_at=? WHERE alert_id=? AND seen_at IS NULL", (utc_now(), alert_id))
+        return redirect(url_for("home") + "#alerts")
+
+    # ------------------------------------------------------------------ project ideas (agent007) and portfolio (agent008)
+    @app.get("/briefs/<brief_id>")
+    def brief_file(brief_id: str):
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT path FROM project_briefs WHERE brief_id=?", (brief_id,)).fetchone()
+        path = Path(row[0]).resolve() if row else None
+        if not path or orch.runs_dir.resolve() not in path.parents or not path.is_file():
+            abort(404)
+        return send_file(path, mimetype="text/plain; charset=utf-8")
+
+    @app.post("/briefs/<brief_id>/demo")
+    def brief_demo(brief_id: str):
+        check_csrf()
+        if orch.busy() or not _run_lock.acquire(blocking=False):
+            return redirect(url_for("home", msg="A run is already in progress."))
+
+        def work():
+            try:
+                orch.run("portfolio", params={"agent008": {"brief_id": brief_id}}, title=f"portfolio demo {brief_id} (web)")
+            finally:
+                _run_lock.release()
+        threading.Thread(target=work, daemon=True, name=f"demo-{brief_id}").start()
+        return redirect(url_for("home", msg="Run started.") + "#projects")
+
+    @app.get("/portfolio/<entry_id>/<path:name>")
+    def portfolio_demo(entry_id: str, name: str):
+        """Local preview of your portfolio with the card (files of the demo folder only)."""
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT demo_path FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
+        if not row:
+            abort(404)
+        base = Path(row[0]).resolve().parent
+        path = (base / name).resolve()
+        if orch.runs_dir.resolve() not in base.parents or (path != base and base not in path.parents) or not path.is_file():
+            abort(404)
+        resp = send_file(path)
+        g.demo_page = True                     # your own site: its inline styles / scripts are allowed on this route
+        return resp
+
+    @app.post("/entries/<entry_id>/publish")
+    def entry_publish(entry_id: str):
+        check_csrf()
+        from datetime import datetime as _dt
+        try:
+            pub = _dt.fromisoformat(request.form.get("publish_at", ""))
+            exp = _dt.fromisoformat(request.form["expire_at"]) if request.form.get("expire_at") else None
+        except ValueError:
+            return redirect(url_for("home", msg="Invalid date.") + "#projects")
+        if exp and exp <= pub:
+            return redirect(url_for("home", msg="Invalid date.") + "#projects")
+        cfg = orch.config["portfolio"]
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT slug FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
+        if not row:
+            abort(404)
+        orch.store.request_approval("publish_portfolio_entry", entry_id, {
+            "repo": cfg["repo"], "file": cfg["file"], "slug": row[0], "publish_at": pub.isoformat(timespec="minutes"),
+            "expire_at": exp.isoformat(timespec="minutes") if exp else None})
+        return redirect(url_for("home", msg="Publication requested: approve it on the Supervision page.") + "#projects")
 
     @app.post("/runs")
     def start_run():
@@ -111,7 +196,8 @@ def register(app, orch: Orchestrator) -> None:
                 _run_lock.release()
 
         threading.Thread(target=work, daemon=True, name=f"run-{chain}").start()
-        return redirect(url_for("home", msg="Run started."))
+        return redirect(url_for("home", msg={"inbox": "Inbox check started.", "weekly": "Weekly analysis started."}
+                                .get(chain, "Run started.")))
 
     @app.post("/inbox")
     def add_offer():
@@ -146,6 +232,19 @@ def register(app, orch: Orchestrator) -> None:
                             (o["first_seen_run"],)).fetchone()
             apps = [dict(r) for r in c.execute("SELECT * FROM applications WHERE offer_id=? ORDER BY created_at DESC",
                                                (offer_id,))]
+        from app.agent.agent005_company_researcher import company_key
+        with db_connect(orch.db_path) as c:
+            comp = c.execute("SELECT facts, match_confidence, updated_at FROM companies WHERE company_key=?",
+                             (company_key(o["company"]),)).fetchone()
+            ids = [a["application_id"] for a in apps] or [""]
+            q = ",".join("?" * len(ids))
+            mails = [dict(r) for r in c.execute(f"SELECT * FROM email_events WHERE application_id IN ({q}) ORDER BY received_at DESC", ids)]
+            sheets = [dict(r) for r in c.execute(f"SELECT * FROM interview_sheets WHERE application_id IN ({q})", ids)]
+            drafts = [dict(r) for r in c.execute(f"SELECT * FROM followup_drafts WHERE application_id IN ({q})", ids)]
+        company = {"facts": json.loads(comp[0]), "confidence": comp[1], "updated_at": comp[2]} if comp else None
+        for sh in sheets:
+            pth = Path(sh["path"])
+            sh["text"] = pth.read_text(encoding="utf-8") if pth.is_file() else ""
         for a in apps:
             folder = orch.runs_dir / a["package_ref"]
             a["files"] = [f for f in ("cv.pdf", "letter.pdf", "package.md") if (folder / f).is_file()]
@@ -159,7 +258,8 @@ def register(app, orch: Orchestrator) -> None:
                  {"name": "Scoring", "state": ("failed" if s and s["eliminated"] else "succeeded") if s else "pending"},
                  {"name": "Application", "state": ("succeeded" if any(a["status"] != "ready" for a in apps)
                                                    else "partial") if apps else "pending"}]
-        return render_template("job_pilot_page.html", o=o, d=d, s=s, aliases=aliases, steps=steps, apps=apps,
+        return render_template("job_pilot_page.html", o=o, d=d, s=s, aliases=aliases, steps=steps, apps=apps, company=company,
+                               mails=mails, sheets=sheets, drafts=drafts,
                                run=dict(run) if run else None, busy=bool(orch.busy()), msg=request.args.get("msg"))
 
     @app.post("/offers/<offer_id>/decision")
@@ -191,7 +291,7 @@ def register(app, orch: Orchestrator) -> None:
 
         def work():
             try:
-                orch.run("application", params={"agent006": {"offer_id": offer_id, "letter": letter}},
+                orch.run("application", params=application_params(offer_id, letter),
                          title=f"application {offer_id} (web)")
             finally:
                 _run_lock.release()
@@ -236,8 +336,9 @@ def register(app, orch: Orchestrator) -> None:
             last_daily = c.execute("SELECT run_id FROM source_runs ORDER BY started_at DESC LIMIT 1").fetchone()
             sources = [dict(r) for r in c.execute("SELECT * FROM source_runs WHERE run_id=? ORDER BY source_id",
                                                   (last_daily[0],))] if last_daily else []
+            snap = c.execute("SELECT metrics FROM metrics_snapshots ORDER BY created_at DESC LIMIT 1").fetchone()
         backup_dir = orch.db_path.parent / "backups"
-        return render_template("job_pilot_standup.html", **data, sources=sources,
+        return render_template("job_pilot_standup.html", **data, sources=sources, stats=json.loads(snap[0]) if snap else None,
                                backups=sv.backups(backup_dir, "job_pilot"),
                                disk=sv.disk_usage({"database": orch.db_path.parent, "runs": orch.runs_dir}))
 
@@ -245,9 +346,9 @@ def register(app, orch: Orchestrator) -> None:
     def approval_decide(approval_id: int):
         check_csrf()
         try:
-            orch.store.decide(approval_id, request.form.get("decision") == "approve", handlers={})
-        except (KeyError, ValueError):
-            pass
+            orch.decide(approval_id, request.form.get("decision") == "approve")
+        except (KeyError, ValueError) as exc:
+            orch.store.log_event("warning", "approval_refused", f"{approval_id}: {exc}", agent_id="user")
         return redirect(url_for("standup") + "#approvals")
 
     @app.post("/skills/propose")

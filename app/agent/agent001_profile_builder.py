@@ -19,6 +19,7 @@ Error policy     : an invalid profile blocks the run (critical agent) with the l
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -218,7 +219,12 @@ class Agent(BaseAgent):
         profile_hash = sha(raw)
         criteria = ctx.instance["criteria"]
         terms = derive_terms(profile, criteria, ctx.words)
+        # SKILL_FROM_PROFILE_TEXT (real case 2026-11-21: "linux" counted missing although the CV says "Linux embarqué"
+        # and "i.MX93 sous Linux"): a lexicon technology written in the profile counts as known (level 'working').
+        text = fold(json.dumps({k: v for k, v in profile.items() if k != "identity"}, ensure_ascii=False))
+        written = sorted(k for k, terms in ctx.words["skill_lexicon"].items() if any(contains_term(text, t) for t in terms))
         summary = {"experiences": len(profile.get("experiences") or []), "projects": len(profile.get("projects") or []),
+                   "skills_written": written,
                    "skills": {fold(sk["name"]): sk["level"] for sk in profile.get("skills") or []},
                    "aliases": {fold(sk["name"]): [fold(a) for a in sk.get("aliases") or []] for sk in profile.get("skills") or []},
                    "city": (profile.get("identity") or {}).get("city"), "example": bool(profile.get("example_profile")),

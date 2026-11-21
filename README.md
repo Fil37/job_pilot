@@ -3,9 +3,9 @@
 Suit ta recherche d'emploi de bout en bout : trouve les offres, les filtre, les classe, prépare les candidatures,
 comble les lacunes et suit les réponses. **Rien n'est jamais envoyé vers l'extérieur sans ta validation.**
 
-Version 0.2 (2026-11-21) : les étapes 1 à 5 et 7 du plan sont construites (CV et paquet de candidature) (profil, collecte, filtre d'expérience,
-score, récapitulatif, interface, supervision). Les agents 005 à 011 ont leur contrat et leurs skills, mais restent
-désactivés tant que leur étape n'est pas construite.
+Version 0.3 (2026-11-21) : les 12 agents sont construits et actifs (profil, collecte, filtre d'expérience,
+score, récapitulatif, interface, supervision). L'interface lance un planificateur : chaîne quotidienne à 07:30, boîte mail toutes les 15 minutes, analyse
+hebdomadaire le lundi, publications de portfolio dues toutes les heures (tant que l'application tourne).
 
 ## Démarrer
 
@@ -31,13 +31,13 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | agent002_offer_collector | France Travail (API), offres collées à la main, Greenhouse / Lever des entreprises cibles ; normalisation, doublons | construit |
 | agent003_experience_filter | lit tout le texte : années, « hors stage / alternance », junior / senior, contradictions → garder / rejeter / à vérifier | construit |
 | agent004_offer_scorer | score = somme pondérée, satisfait / manques, éliminations avec raison | construit |
-| agent005_company_researcher | fiche entreprise sourcée | étape 6 |
+| agent005_company_researcher | fiche entreprise : registre officiel (API Recherche d'entreprises), Wikipédia, signal de recrutement ; chaque fait sourcé | construit |
 | agent006_application_builder | CV LaTeX (Tectonic), lettre si demandée, paquet ; DeepSeek propose titre / accroche / résumé, le programme vérifie (faits du profil, 1 page, ATS) | construit |
-| agent007_gap_project_planner | lacunes sur 30 jours → brief de projet | étape 9 |
-| agent008_portfolio_publisher | démo locale, publication datée après validation | étape 9 |
-| agent009_inbox_tracker | boîte mail en lecture seule, classement avec confiance, alertes | étape 8 |
-| agent010_followup_coach | fiche d'entretien, brouillon de relance | étape 8 |
-| agent011_pipeline_analyst | statistiques, proposition de pondérations (validation) | étape 9 |
+| agent007_gap_project_planner | lacunes sur 30 jours, 4 règles de déclenchement calculées → brief de projet (DeepSeek, vérifié) | construit |
+| agent008_portfolio_publisher | démo de ton vrai portfolio avec la carte ; publication datée et retrait après validation (index.html seulement, entre balises) | construit |
+| agent009_inbox_tracker | Gmail en lecture seule (IMAP EXAMINE + BODY.PEEK), rattachement, classement avec confiance, alertes ; aucun corps de mail stocké | construit (attend IMAP_PASSWORD) |
+| agent010_followup_coach | fiche d'entretien, proposition d'agenda (.ics après validation), brouillon de relance (jamais envoyé) | construit |
+| agent011_pipeline_analyst | statistiques, proposition de pondérations (validation) | construit |
 
 ## Sources et conditions d'utilisation (vérifiées le 2026-11-21)
 

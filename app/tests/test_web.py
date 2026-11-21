@@ -90,5 +90,33 @@ def test_every_reason_and_elimination_has_a_french_label():
     assert [t for t in texts if t not in w["ui_text"]["fr"]] == []
 
 
+def test_alerts_projects_and_publication_request():
+    """Case: an alert is shown then marked seen; a project idea with a demo can be asked for publication, which only
+    creates an approval (nothing is published); the demo route serves only files of its own folder."""
+    orch, cl = client()
+    c = sqlite3.connect(orch.db_path)
+    demo = orch.runs_dir / "r9" / "portfolio_demo"
+    demo.mkdir(parents=True)
+    (demo / "index.html").write_text("<html>demo</html>")
+    with c:
+        c.execute("INSERT INTO alerts(kind,category,message,created_at) VALUES ('immediate','interview','Entretien ACME','t')")
+        c.execute("INSERT INTO project_briefs VALUES ('b_1','kafka','Projet Kafka','{}','x','proposed','r9','2026-11-21')")
+        c.execute("INSERT INTO portfolio_entries(entry_id,brief_id,slug,demo_path,status,run_id,updated_at) VALUES "
+                  "('p_1','b_1','projet-kafka',?,'demo','r9','t')", (str(demo / "index.html"),))
+    html = cl.get("/").data.decode()
+    assert "Entretien ACME" in html and "Projet Kafka" in html
+    tok = token(cl)
+    cl.post("/alerts/1/seen", data={"csrf": tok})
+    assert c.execute("SELECT seen_at IS NOT NULL FROM alerts").fetchone()[0] == 1
+    assert cl.get("/portfolio/p_1/index.html").data == b"<html>demo</html>"
+    assert cl.get("/portfolio/p_1/..%2F..%2F..%2Fjob_pilot.json").status_code == 404
+    cl.post("/entries/p_1/publish", data={"csrf": tok, "publish_at": "2026-12-01T09:00", "expire_at": "2026-11-01T09:00"})
+    assert not orch.store.approvals()[-1]["action"] == "publish_portfolio_entry"
+    cl.post("/entries/p_1/publish", data={"csrf": tok, "publish_at": "2026-12-01T09:00"})
+    appr = [a for a in orch.store.approvals() if a["action"] == "publish_portfolio_entry"]
+    assert len(appr) == 1 and appr[0]["parameters"]["publish_at"] == "2026-12-01T09:00"
+    assert c.execute("SELECT status FROM portfolio_entries").fetchone()[0] == "demo"
+
+
 if __name__ == "__main__":
     run_main(globals())

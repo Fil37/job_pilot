@@ -40,17 +40,32 @@ def create_app(orch: Orchestrator | None = None, *, start: bool = True) -> Flask
 
 
 def scheduler(orch: Orchestrator, stop: threading.Event) -> None:
-    """Daily chain once a day at schedule.daily_at, only while the application runs (no system timer)."""
-    at = orch.config["schedule"]["daily_at"]
-    done_day = None
+    """While the application runs (no system timer): daily chain at schedule.daily_at, inbox every
+    schedule.inbox_every_min minutes, weekly analysis on schedule.weekly_day, due portfolio publications every
+    schedule.portfolio_every_min minutes. One run at a time; a busy period is simply retried at the next tick."""
+    sch = orch.config["schedule"]
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    last = {"daily": None, "weekly": None, "inbox": 0.0, "portfolio": 0.0}
     while not stop.wait(30):
-        now = time.localtime()
-        if time.strftime("%H:%M", now) >= at and done_day != now.tm_yday and not orch.busy():
-            done_day = now.tm_yday
+        now, mono = time.localtime(), time.monotonic()
+        due = []
+        if time.strftime("%H:%M", now) >= sch["daily_at"] and last["daily"] != now.tm_yday:
+            due.append("daily")
+        if days[now.tm_wday] == sch.get("weekly_day", "monday") and time.strftime("%H:%M", now) >= sch["daily_at"] \
+                and last["weekly"] != now.tm_yday:
+            due.append("weekly")
+        if mono - last["inbox"] >= sch.get("inbox_every_min", 15) * 60:
+            due.append("inbox")
+        if mono - last["portfolio"] >= sch.get("portfolio_every_min", 60) * 60:
+            due.append("portfolio")
+        for chain in due:
+            if orch.busy():
+                break
             try:
-                orch.run("daily", title="daily (scheduler)")
+                orch.run(chain, title=f"{chain} (scheduler)")
             except Exception as exc:  # noqa: BLE001 - logged; the scheduler keeps running
-                orch.store.log_event("error", "scheduler_failed", f"{type(exc).__name__}: {exc}", agent_id="agent000")
+                orch.store.log_event("error", "scheduler_failed", f"{chain}: {type(exc).__name__}: {exc}", agent_id="agent000")
+            last[chain] = now.tm_yday if chain in ("daily", "weekly") else time.monotonic()
 
 
 def main() -> int:

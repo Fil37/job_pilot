@@ -75,5 +75,13 @@ def test_mobility_france_accepts_france_and_refuses_abroad():
     assert "LOCATION_OUTSIDE" in s["elimination_reasons"]
 
 
+def test_a_technology_written_in_the_profile_is_known():
+    """Incident 2026-11-21 (check SKILL_FROM_PROFILE_TEXT): 'linux' counted missing although the CV says 'Linux
+    embarqué'; agent001 now lists the lexicon technologies written in the profile."""
+    prof = dict(PROFILE, skills_written=["linux"])
+    s = score_offer(offer(description="Python, SQL sous Linux."), "keep", TERMS, prof, CRIT, W, SCORING)
+    assert "linux" not in s["missing"] and {"skill": "linux", "level": "working"} in s["matched"]
+
+
 if __name__ == "__main__":
     run_main(globals())
