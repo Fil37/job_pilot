@@ -169,5 +169,48 @@ def test_model_texts_have_no_english_long_dash():
     assert "—" not in json.dumps(ans, ensure_ascii=False)
 
 
+def test_section_is_projets_and_personal_projects_are_labelled():
+    """User request 2026-11-22 (check PROJECT_KIND_LABEL): section 'Projets' (not 'Projets académiques
+    sélectionnés'); a personal project shows 'Personnel' right after its title, an academic one shows nothing."""
+    import tempfile
+    from conftest import make_instance
+    tmp = Path(tempfile.mkdtemp())
+    inst = make_instance(tmp)
+    prof = Path(inst["profile_path"])
+    prof.write_text(prof.read_text().replace("    name: \"Tableau de bord de qualité de l'air\"",
+                                             "    name: \"Tableau de bord de qualité de l'air\"\n    kind: personal"))
+
+    def answer(body):
+        ids = re.findall(r'"id": "(prj_[a-z_]+)"', body["messages"][1]["content"])
+        return {"headline": "Ingénieur data junior", "tagline": "Python · SQL", "project_order": ids,
+                "summary": "Ingénieur diplômé spécialisé en données, à l'aise sur Python et SQL, cherchant un premier "
+                           "poste en CDI. Conception d'un pipeline d'ingestion Python / Airflow traitant 2 millions de "
+                           "lignes par jour et réduction de 30 % du temps de calcul d'un rapport en optimisant les "
+                           "requêtes SQL."}
+    with env_vars(FT_CLIENT_ID="id", FT_CLIENT_SECRET="secret-long-enough", DEEPSEEK_API_KEY="test-key-long"):
+        orch = make_orch(tmp, transport=FakeWeb(ft=[ft_offer(1)]), instance=inst)
+        orch.run("daily")
+        oid = sqlite3.connect(orch.db_path).execute("SELECT offer_id FROM offers").fetchone()[0]
+        from app.agent import agent000_job_pilot as a0
+        original = a0.Orchestrator._ctx
+
+        def ctx_with_model(self, *a, **k):
+            c = original(self, *a, **k)
+            c.llm_transport = fake_model(answer)
+            return c
+        a0.Orchestrator._ctx = ctx_with_model
+        try:
+            r = orch.run("application", params={"agent006": {"offer_id": oid}, "agent005": {"offer_id": oid}})
+        finally:
+            a0.Orchestrator._ctx = original
+    if not engine(type("C", (), {"config": orch.config})()):
+        return
+    tex_src = (orch.runs_dir / r["run_id"] / f"application_{oid}" / "cv.tex").read_text()
+    assert r"\section{Projets}" in tex_src and "académiques" not in tex_src
+    assert r"\project{Tableau de bord de qualité de l'air}{}{Personnel}" in tex_src
+    text = (orch.runs_dir / r["run_id"] / f"application_{oid}" / "cv.txt").read_text()
+    assert re.search(r"Tableau de bord de qualité de l.air\s+Personnel", text)
+
+
 if __name__ == "__main__":
     run_main(globals())

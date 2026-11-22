@@ -76,7 +76,10 @@ CHECKS = [
      "2026-11-21 Alice & Bob CV: 'avec un souci de robustesse et de maintenabilité' added by the model"),
 ]
 LABELS_FR = {"headline": "Titre", "tagline": "Accroche", "summary": "Résumé"}
-SECTIONS = ("Compétences techniques", "Expériences professionnelles", "Projets académiques sélectionnés", "Formation")
+SECTIONS = ("Compétences techniques", "Expériences professionnelles", "Projets", "Formation")
+# PROJECT_KIND_LABEL (user request 2026-11-22): section "Projets"; a personal project shows "Personnel" next to its
+# title, in the style of its stack; academic projects show nothing.
+KIND_LABELS = {"academic": "", "personal": "Personnel"}
 LATEX_SPECIAL = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_", "{": r"\{",
                  "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
 
@@ -152,6 +155,7 @@ def select_content(profile: dict, req: set[str]) -> dict:
     for p in profile.get("projects") or []:
         skills = [s for b in p.get("bullets") or [] for s in b.get("skills", [])]
         projects.append({"id": p["id"], "name": p["name"], "tags": p.get("tags", ""),
+                         "kind_label": KIND_LABELS.get(p.get("kind", "academic"), ""),
                          "bullets": [b["variants"][0] for b in p.get("bullets") or []], "score": relevance(skills, req),
                          "skills": sorted(set(skills))})
     projects.sort(key=lambda p: -p["score"])
@@ -421,7 +425,8 @@ class Agent(BaseAgent):
                 "skill_groups": [{"label": tex(g["label"]), "text": tex(g["text"])} for g in profile.get("skill_groups") or []],
                 "experiences": [{**e, "role": tex(e["role"]), "company": tex(e["company"]), "city": tex(e["city"]),
                                  "dates": tex(e["dates"]), "bullets": [tex(b) for b in e["bullets"]]} for e in sel["experiences"]],
-                "projects": [{"name": tex(p["name"]), "tags": tex(p["tags"]), "bullets": [tex(b) for b in p["bullets"]]}
+                "projects": [{"name": tex(p["name"]), "tags": tex(p["tags"]), "kind_label": tex(p["kind_label"]),
+                              "bullets": [tex(b) for b in p["bullets"]]}
                              for p in projects],
                 "education": [{"degree": tex(d["degree"]), "dates": tex(f"{d.get('start')} à {d.get('end')}"),
                                "school_line": tex(", ".join(x for x in (d.get("school"), d.get("country")) if x) + ". "

@@ -19,7 +19,8 @@
 \titlespacing*{\section}{0pt}{\VAR{section_skip}}{3pt}
 \setlist[itemize]{leftmargin=1.1em,label=\textbullet,nosep,topsep=1pt,itemsep=0.5pt}
 \newcommand{\entry}[4]{\textbf{#1}\hfill{\small #2}\\{\small\color{muted}#3}\hfill{\small\color{muted}#4}\par}
-\newcommand{\project}[2]{\textbf{#1}\hfill{\small\color{muted}#2}\par}
+%% project: title, then the kind label ("Personnel") in the style of the stack, then the stack on the right
+\newcommand{\project}[3]{\textbf{#1}\ifx&#3&\else\ \ {\small\color{muted}#3}\fi\hfill{\small\color{muted}#2}\par}
 \begin{document}
 \begin{center}
 {\LARGE\bfseries \VAR{name}}\\[2pt]
@@ -44,8 +45,8 @@
 \BLOCK{endfor}\end{itemize}
 \vspace{\VAR{item_skip}}
 \BLOCK{endfor}
-\section{Projets académiques sélectionnés}
-\BLOCK{for p in projects}\project{\VAR{p.name}}{\VAR{p.tags}}
+\section{Projets}
+\BLOCK{for p in projects}\project{\VAR{p.name}}{\VAR{p.tags}}{\VAR{p.kind_label}}
 \begin{itemize}
 \BLOCK{for b in p.bullets}\item \VAR{b}
 \BLOCK{endfor}\end{itemize}

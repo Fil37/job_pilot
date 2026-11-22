@@ -97,6 +97,8 @@ def check_profile(profile: dict) -> tuple[list[str], list[dict]]:
                         problems.append(f"{item.get('id')}: {exc}")
             if section == "experiences" and item.get("kind") not in KINDS:
                 problems.append(f"{item.get('id')}: kind must be one of {KINDS}")
+            if section == "projects" and item.get("kind", "academic") not in ("academic", "personal"):
+                problems.append(f"{item.get('id')}: project kind must be academic or personal")
     for _section, item, b in all_bullets(profile):
         ids.append(b.get("id"))
         if not b.get("variants"):
