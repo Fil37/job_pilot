@@ -144,6 +144,9 @@ class Orchestrator:
             enabled = self.config["agents_enabled"].get(aid, False)
             checks[aid] = (lambda a=agent, e=enabled: a.healthcheck(self._ctx("startup", "startup", {})) if e
                            else ("disabled", "disabled in settings.agents_enabled"))
+        # AGENT000_HEALTH (user question 2026-11-22: "pourquoi agent000 est inconnu"): the orchestrator checks itself
+        # too (registry, database writable, runs folder writable); it was never in any health check.
+        checks[AGENT_ID] = self._self_check
         states = self.store.startup_check(checks)
         interrupted = self.store.mark_interrupted_runs()
         if self.backup:
@@ -154,6 +157,14 @@ class Orchestrator:
         if problems:
             raise ConfigError("; ".join(problems))
         return {"health": states, "interrupted": interrupted}
+
+    def _self_check(self) -> tuple[str, str]:
+        with db_connect(self.db_path) as c:
+            c.execute("SELECT COUNT(*) FROM sup_runs").fetchone()
+        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        if not os.access(self.runs_dir, os.W_OK):
+            return "critical", "runs folder not writable"
+        return "healthy", f"registry of {len(self.registry.agents)} agents valid, database and runs folder writable"
 
     # ------------------------------------------------------------------ helpers
     def _ctx(self, run_id: str, task_id: str, previous: dict, params: dict | None = None,
@@ -275,7 +286,9 @@ class Orchestrator:
             self.store.set_task(task_id, env["status"] if env["status"] in sv.TASK_STATUSES else "failed", detail)
             if env["status"] in ("failed", "blocked") and route.get("critical"):
                 halted_by = aid
-        self.store.update_health_after_run(run_id, {a: s for a, s in statuses.items() if s not in ("skipped", "not_run")})
+        results = {a: st for a, st in statuses.items() if st not in ("skipped", "not_run")}
+        results[AGENT_ID] = "succeeded"           # the orchestrator went through the whole run and wrote its report
+        self.store.update_health_after_run(run_id, results)
         report = self.build_report(run_id, chain_name, members, statuses, previous, halted_by)
         (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
         if report.get("digest"):

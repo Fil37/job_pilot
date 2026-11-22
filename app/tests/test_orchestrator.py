@@ -120,5 +120,15 @@ def test_user_override_is_kept_and_rescore_does_not_redecide():
     assert oid in [o["offer_id"] for o in r["digest"]["top"]]
 
 
+def test_agent000_has_a_health_state():
+    """User question 2026-11-22 ('pourquoi agent000 est inconnu', check AGENT000_HEALTH): the orchestrator gets a
+    health state at start and stays healthy after a run (it was 'unknown' on the Supervision page)."""
+    orch = make_orch()
+    assert orch.store.health()["agent000"] == "healthy"
+    orch.run(None, only=["agent001"])
+    assert orch.store.health()["agent000"] == "healthy"
+    assert "agent000" in [a["id"] for a in orch.store.dashboard(orch.agent_ids)["agents"] if a["state"] == "healthy"]
+
+
 if __name__ == "__main__":
     run_main(globals())
