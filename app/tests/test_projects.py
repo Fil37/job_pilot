@@ -22,7 +22,9 @@ from app.agent.agent011_pipeline_analyst import propose_weights  # noqa: E402
 GAPS = {"window_days": 30, "min_score": 55, "max_missing": 2, "max_briefs_per_run": 3}
 BRIEF = {"title": "Bus CAN sur STM32 avec <script>", "objective": "Apprendre Kafka & co.",
          "portfolio_summary": "Chaîne de messages Kafka & co. entre un PC et une carte.", "builds_on": ["python", "sql"],
-         "architecture": "Producteur Python → Kafka → consommateur", "hardware": ["PC"], "software": ["Kafka"],
+         "architecture": "Producteur Python → Kafka → consommateur",
+         "hardware": [{"name": "PC", "role": "héberge Kafka", "specs": "8 Go de RAM", "example": "portable", "alternative": "VM",
+                       "optional": False}], "software": ["Kafka"],
          "steps": [{"days": f"J{i}", "milestone": f"étape {i}", "deliverable": "d"} for i in range(1, 6)],
          "success_criteria": ["1000 messages/s"], "pitfalls": ["partitions"], "interview_pitch": "Projet d'apprentissage.",
          "done_on": "2025-06",
@@ -452,6 +454,31 @@ def test_one_slot_goes_to_a_reinforcement_and_it_lists_the_offers_it_improves():
     assert b["coverage"]["offers"] == 4 and b["coverage"]["avg_score_gain"] > 0
     text = Path(path).read_text()
     assert "Type : **renforcement**" in text and "améliore **4 offre(s) favorable(s)**" in text
+
+
+def test_hardware_items_are_detailed_and_older_briefs_get_their_details():
+    """Request of the user 2026-11-23 (HARDWARE_DETAIL): every hardware item has its role, what to check, an example and
+    an alternative (never a price); an older brief with plain names is detailed by the model, names kept as they are."""
+    from app.agent.agent007_gap_project_planner import detail_hardware, hw_item, hw_line
+    assert hw_item("Oscilloscope") == {"name": "Oscilloscope", "role": "", "specs": "", "example": "", "alternative": "",
+                                       "optional": False}
+    line = hw_line({"name": "DE0-Nano", "role": "cible FPGA", "specs": "Cyclone IV, 3,3 V", "example": "Terasic DE0-Nano",
+                    "alternative": "simulation GHDL", "optional": True})
+    assert line == ("- **DE0-Nano** (facultatif) : cible FPGA ; à vérifier : Cyclone IV, 3,3 V ; exemple : Terasic DE0-Nano ; "
+                    "alternative : simulation GHDL")
+    tmp = Path(tempfile.mkdtemp())
+    orch = make_orch(tmp)
+    ctx = orch._ctx("r_hw", "t", {})
+    sent = []
+
+    class Client:
+        def chat_json(self, messages, **k):
+            sent.append(messages)
+            n = len(json.loads(messages[1]["content"])["hardware"])
+            items = [{"role": "r", "specs": "s", "example": "e", "alternative": "a"}] * (n if len(sent) > 1 else n - 1)
+            return {"items": items}
+    got = detail_hardware(Client(), ctx, {"title": "t", "architecture": "a", "hardware": ["Carte A", "Câble B"]})
+    assert len(sent) == 2 and [g["name"] for g in got] == ["Carte A", "Câble B"] and got[0]["specs"] == "s"
 
 
 if __name__ == "__main__":

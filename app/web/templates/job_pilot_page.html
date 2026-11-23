@@ -89,7 +89,7 @@
       <label class="mt-12">{{ _('Objective') }}<textarea name="objective" rows="4" required>{{ doc.edit.objective }}</textarea></label>
       <label class="mt-12">{{ _('Builds on (comma-separated)') }}<input type="text" name="builds_on" value="{{ doc.edit.builds_on }}"></label>
       <label class="mt-12">{{ _('Architecture') }}<textarea name="architecture" rows="5">{{ doc.edit.architecture }}</textarea></label>
-      <label class="mt-12">{{ _('Hardware (one per line)') }}<textarea name="hardware" rows="4">{{ doc.edit.hardware }}</textarea></label>
+      <label class="mt-12">{{ _('Hardware (one per line: name | role | to check | example | alternative | facultatif)') }}<textarea name="hardware" rows="4">{{ doc.edit.hardware }}</textarea></label>
       <label class="mt-12">{{ _('Software (one per line)') }}<textarea name="software" rows="4">{{ doc.edit.software }}</textarea></label>
       <label class="mt-12">{{ _('Steps (one per line: days | milestone | deliverable)') }}<textarea name="steps" rows="8">{{ doc.edit.steps }}</textarea></label>
       <label class="mt-12">{{ _('Success criteria (one per line)') }}<textarea name="success_criteria" rows="4">{{ doc.edit.success_criteria }}</textarea></label>
@@ -101,10 +101,23 @@
   </section>
   {% endif %}
   {% for sec in doc.sections %}
+  {% if doc.hardware and sec.title == 'Matériel' %}
+  <section class="panel doc hw-panel">
+    <div class="panel-title"><h2>{{ sec.title }}</h2><span class="small faint">{{ _('Hover or focus an item for its details') }}</span></div>
+    <ul class="hw-list">{% for h in doc.hardware %}<li><span class="hw" tabindex="0">{{ h.name }}{% if h.optional %} <span class="badge plain">{{ _('optional') }}</span>{% endif %}
+      {% if h.role or h.specs or h.example or h.alternative %}<span class="hw-tip" role="tooltip">
+        {% if h.role %}<b>{{ _('Role') }}</b> {{ h.role }}<br>{% endif %}
+        {% if h.specs %}<b>{{ _('To check') }}</b> {{ h.specs }}<br>{% endif %}
+        {% if h.example %}<b>{{ _('Example') }}</b> {{ h.example }}<br>{% endif %}
+        {% if h.alternative %}<b>{{ _('Alternative') }}</b> {{ h.alternative }}{% endif %}
+      </span>{% endif %}</span></li>{% endfor %}</ul>
+  </section>
+  {% else %}
   <section class="panel doc">
     {% if sec.title %}<div class="panel-title"><h2>{{ sec.title }}</h2></div>{% endif %}
     {{ sec.html }}
   </section>
+  {% endif %}
   {% endfor %}
   {% else %}
   {#- job_pilot — offer page: offer, experience decision with its source sentence, score, aliases, provenance. -#}

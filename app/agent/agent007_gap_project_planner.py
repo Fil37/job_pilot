@@ -62,12 +62,16 @@ SKILLS = [
 AGENT_ID = "agent007"
 BRIEF_PROMPT = """You design a realistic personal project of 1 to 2 weeks for a junior embedded / electronics engineer, so
 that he can learn the skills ONE job offer asks for and he does not have yet. Answer in JSON only, exactly:
-{"title": "...", "objective": "...", "portfolio_summary": "...", "builds_on": ["skill", ...], "architecture": "...", "hardware": ["..."],
+{"title": "...", "objective": "...", "portfolio_summary": "...", "builds_on": ["skill", ...], "architecture": "...",
+ "hardware": [{"name": "...", "role": "...", "specs": "...", "example": "...", "alternative": "...", "optional": false}],
  "software": ["..."], "steps": [{"days": "J1-J2", "milestone": "...", "deliverable": "..."}],
  "success_criteria": ["..."], "pitfalls": ["..."], "interview_pitch": "..."}
 Rules: French; every target skill is central and named; the project fits the context of the offer (its domain, its
 products) when the offer says it; builds_on lists 2 to 5 skills taken ONLY from the candidate's skills;
-cheap and available hardware (or simulation); 4 to 7 steps covering at most 10 working days (J1 to J10);
+cheap and available hardware (or simulation); every hardware item details: role = what it does in THIS project,
+specs = the characteristics to check when choosing it (voltage, interface, pins, resolution...), example = one common
+reference (a model name, never a price), alternative = a cheaper option or a simulation, optional = true if the
+project works without it; 4 to 7 steps covering at most 10 working days (J1 to J10);
 measurable success criteria; interview_pitch in 3-4 sentences, without claiming results that do not exist yet;
 portfolio_summary: 1-2 sentences for a PUBLIC portfolio card describing what the project builds, never mentioning a
 missing skill, learning or results not obtained yet.
@@ -86,6 +90,25 @@ KIND_FR = {"gap": "combler un manque", "reinforce": "renforcement", "broaden": "
 
 BRIEF_FIELDS = ("title", "objective", "portfolio_summary", "builds_on", "architecture", "hardware", "software", "steps",
                 "success_criteria", "pitfalls", "interview_pitch")
+
+
+HW_KEYS = ("name", "role", "specs", "example", "alternative")
+
+
+def hw_item(h) -> dict:
+    """HARDWARE_DETAIL: a hardware item as a dict (older briefs have plain strings)."""
+    if isinstance(h, dict):
+        return {**{k: str(h.get(k) or "").strip() for k in HW_KEYS}, "optional": bool(h.get("optional"))}
+    return {"name": str(h), "role": "", "specs": "", "example": "", "alternative": "", "optional": False}
+
+
+def hw_line(h) -> str:
+    """One Markdown line of the brief file for a hardware item."""
+    d = hw_item(h)
+    extra = " ; ".join(x for x in (d["role"], f"à vérifier : {d['specs']}" if d["specs"] else "",
+                                   f"exemple : {d['example']}" if d["example"] else "",
+                                   f"alternative : {d['alternative']}" if d["alternative"] else "") if x)
+    return f"- **{d['name']}**" + (" (facultatif)" if d["optional"] else "") + (f" : {extra}" if extra else "")
 
 
 def public_summary_problems(text: str) -> list[str]:
@@ -114,7 +137,7 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
            *(["## Gain attendu pour cette offre", "", *gain_lines(ans["gain"]), ""] if ans.get("gain") else []),
            *(["## Offres couvertes par ce projet", "", *coverage_lines(ans["coverage"]), ""] if ans.get("coverage") else []),
            "## Objectif", "", ans["objective"], "", f"S'appuie sur : {', '.join(ans['builds_on'])}", "",
-           "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [f"- {h}" for h in ans["hardware"]] + [
+           "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [hw_line(h) for h in ans["hardware"]] + [
            "", "## Logiciels", ""] + [f"- {x}" for x in ans["software"]] + ["", "## Étapes et jalons", ""] + [
            f"- **{st.get('days')}** : {st.get('milestone')}" + (f" (livrable : {st.get('deliverable')})" if st.get("deliverable")
                                                                 else "") for st in ans["steps"]] + [
@@ -129,6 +152,34 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
     if ans.get("edited_at"):
         md += ["", f"Modifié par toi le {ans['edited_at'][:16].replace('T', ' ')}."]
     return "\n".join(md) + "\n"
+
+
+HARDWARE_PROMPT = """For each hardware item of this junior electronics project, give its details. Answer in JSON only:
+{"items": [{"role": "...", "specs": "...", "example": "...", "alternative": "...", "optional": false}]}, one object per
+item, SAME order and SAME count as "hardware". French. role = what it does in THIS project; specs = what to check when
+choosing it (voltage, interface, pins, resolution...); example = one common reference (a model name, never a price);
+alternative = a cheaper option or a simulation; optional = true if the project works without it."""
+
+
+def detail_hardware(client, ctx, brief: dict) -> list[dict] | None:
+    """HARDWARE_DETAIL for an older brief: the model details each item; the NAMES stay exactly yours / the brief's."""
+    names = [hw_item(h)["name"] for h in brief.get("hardware") or []]
+    if not names:
+        return None
+    payload = {"title": brief.get("title"), "architecture": brief.get("architecture"), "hardware": names}
+
+    def check(ans):
+        items = ans.get("items") if isinstance(ans, dict) else None
+        if not isinstance(items, list) or len(items) != len(names):
+            return [f"'items' must have exactly {len(names)} objects, in the order of 'hardware'"]
+        bad = [i for i, x in enumerate(items) if not isinstance(x, dict) or not all(
+            isinstance(x.get(k), str) and x.get(k).strip() for k in ("role", "specs"))]
+        return [f"items {bad}: role and specs must be non-empty"] if bad else []
+    ans, _probs, _n = ask_with_corrections(client, HARDWARE_PROMPT, payload, check, purpose="hardware_detail", ctx=ctx,
+                                           max_corrections=ctx.config["retries"]["llm_correction_max"])
+    if not ans:
+        return None
+    return [hw_item({**x, "name": n}) for n, x in zip(names, ans["items"])]
 
 
 def favourable(r: dict, cfg: dict) -> bool:
@@ -225,6 +276,11 @@ class Agent(BaseAgent):
             if not isinstance(ans, dict) or any(not ans.get(k) for k in need):
                 return [f"every key is required: {list(need)}"]
             probs = []
+            hw_bad = [h for h in ans["hardware"] if not isinstance(h, dict) or not all(
+                isinstance(h.get(k), str) and h.get(k).strip() for k in ("name", "role", "specs"))]
+            if hw_bad:
+                probs.append("every hardware item is an object with non-empty name, role and specs (plus example, "
+                             f"alternative, optional): fix {len(hw_bad)} item(s)")
             foreign = [b for b in ans["builds_on"] if fold(b) not in own]
             if foreign:
                 probs.append(f"builds_on must only list candidate skills; remove {foreign}")
@@ -343,7 +399,7 @@ class Agent(BaseAgent):
                                  "detail": "; ".join(probs)[:200]})
                 warnings.append(f"brief {item} not written: {'; '.join(probs)[:120]}")
                 continue
-            ans = {**ans, "kind": kind}
+            ans = {**ans, "kind": kind, "hardware": [hw_item(h) for h in ans["hardware"]]}
             with ctx.connect() as c:
                 if kind == "gap":
                     gain = project_gain(c, o["offer_id"], skills, **gain_args)

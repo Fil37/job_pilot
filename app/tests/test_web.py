@@ -235,7 +235,8 @@ def test_you_can_edit_a_project_idea():
     assert 'name="steps"' in page and "J1 | m | d" in page
     tok = token(cl)
     form = {"csrf": tok, "title": "Filtre FIR en Verilog sur FPGA", "objective": "Mon objectif à moi.",
-            "builds_on": "vhdl, python", "architecture": "Chaîne ADC puis FIR", "hardware": "DE0-Nano\nCâbles",
+            "builds_on": "vhdl, python", "architecture": "Chaîne ADC puis FIR",
+            "hardware": "DE0-Nano | cible FPGA | Cyclone IV, 3,3 V | Terasic DE0-Nano | simulation GHDL\nCâbles | liaisons | | | | facultatif",
             "software": "Icarus Verilog", "steps": "J1-J2 | Banc de test | tb.v\nJ3 | Synthèse", "success_criteria": "0 erreur",
             "pitfalls": "timing", "interview_pitch": "Je l'ai conçu.", "portfolio_summary": "Pour apprendre Verilog.",
             "done_on": "2025-06"}
@@ -246,9 +247,12 @@ def test_you_can_edit_a_project_idea():
     c = sqlite3.connect(orch.db_path)
     title, saved = c.execute("SELECT title, brief FROM project_briefs WHERE brief_id='b_e'").fetchone()
     saved = _json.loads(saved)
-    assert title == form["title"] and saved["hardware"] == ["DE0-Nano", "Câbles"] and saved["edited_at"]
+    assert title == form["title"] and [h["name"] for h in saved["hardware"]] == ["DE0-Nano", "Câbles"] and saved["edited_at"]
     assert saved["done_on"] == "2025-06" and "Réalisé en : 2025-06" in path.read_text()
     assert saved["steps"][1] == {"days": "J3", "milestone": "Synthèse", "deliverable": ""}
+    assert saved["hardware"][0]["specs"] == "Cyclone IV, 3,3 V" and saved["hardware"][1]["optional"] is True
+    page = cl.get("/docs/brief/b_e").data.decode()           # HARDWARE_DETAIL: details on hover, escaped
+    assert 'class="hw" tabindex="0"' in page and "Cyclone IV, 3,3 V" in page and 'class="hw-tip"' in page
     text = path.read_text()
     assert text.startswith("# Filtre FIR en Verilog sur FPGA") and "Modifié par toi le" in text
     assert c.execute("SELECT COUNT(*) FROM events WHERE code='user_brief_edit'").fetchone()[0] == 1

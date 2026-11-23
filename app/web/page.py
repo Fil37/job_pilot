@@ -34,6 +34,18 @@ def label_skills(skill_csv: str, alts_json) -> str:
     return ", ".join(skill_label(x.strip(), alts) for x in (skill_csv or "").split(","))
 
 
+def hw_from_line(line: str) -> dict:
+    """'name | role | specs | example | alternative | facultatif' (edit form) → a hardware item."""
+    parts = [x.strip() for x in line.split("|")] + [""] * 6
+    return {"name": parts[0], "role": parts[1], "specs": parts[2], "example": parts[3], "alternative": parts[4],
+            "optional": fold_text(parts[5]).startswith("facultatif")}
+
+
+def fold_text(t: str) -> str:
+    from app.agent import fold
+    return fold(t or "")
+
+
 def inline_md(text: str) -> str:
     """Escape FIRST (contents of offers, mails and model answers are data), then **bold** and links."""
     out = html.escape(text, quote=True)
@@ -480,8 +492,11 @@ def register(app, orch: Orchestrator) -> None:
         form = {k: ans.get(k, "") for k in ("title", "objective", "portfolio_summary", "architecture", "interview_pitch")}
         form["builds_on"] = ", ".join(ans.get("builds_on") or [])
         form["done_on"] = ans.get("done_on", "")
+        from app.agent.agent007_gap_project_planner import hw_item
         for k in LIST_FIELDS:
-            form[k] = "\n".join(ans.get(k) or [])
+            form[k] = "\n".join(ans.get(k) or []) if k != "hardware" else "\n".join(
+                " | ".join([d["name"], d["role"], d["specs"], d["example"], d["alternative"], "facultatif" if d["optional"] else ""]).rstrip(" |")
+                for d in (hw_item(h) for h in ans.get("hardware") or []))
         form["steps"] = "\n".join(" | ".join(str(st.get(x, "")) for x in ("days", "milestone", "deliverable"))
                                    for st in ans.get("steps") or [] if isinstance(st, dict))
         doc = {"kind": "brief", "ref": brief_id, "title": ans.get("title", ""), "sections": [], "files": [],
@@ -519,7 +534,8 @@ def register(app, orch: Orchestrator) -> None:
         ans = {**b["brief"], "title": f["title"], "objective": f["objective"], "portfolio_summary": f["portfolio_summary"],
                "architecture": f["architecture"], "interview_pitch": f["interview_pitch"],
                "builds_on": [x.strip() for x in f["builds_on"].split(",") if x.strip()], "steps": steps,
-               **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS}, "edited_at": utc_now(),
+               **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS if k != "hardware"},
+               "hardware": [hw_from_line(x) for x in f["hardware"].split("\n") if x.strip()], "edited_at": utc_now(),
                "done_on": done_on or None}
         path.write_text(brief_markdown(offer, [x.strip() for x in b["skill"].split(",")], ans), encoding="utf-8")
         with db_connect(orch.db_path) as c:
@@ -650,8 +666,15 @@ def register(app, orch: Orchestrator) -> None:
                 offer = dict(o)
                 if not re.match(r"https?://", offer.get("url") or ""):     # a link to the offer's site: http(s) only
                     offer["url"] = None
+        hardware = None
+        if kind == "brief":                         # HARDWARE_DETAIL: the hardware panel shows each item's details on hover
+            from app.agent.agent007_gap_project_planner import hw_item
+            with db_connect(orch.db_path) as c:
+                br = c.execute("SELECT brief FROM project_briefs WHERE brief_id=?", (ref,)).fetchone()
+            hw = (json.loads(br[0]) if br and br[0] else {}).get("hardware") or []
+            hardware = [hw_item(h) for h in hw] or None
         doc = {"kind": kind, "ref": ref, "title": title or path.name, "sections": sections, "files": files,
-               "offer_id": row[1], "offer": offer, "when": path.stat().st_mtime}
+               "offer_id": row[1], "offer": offer, "when": path.stat().st_mtime, "hardware": hardware}
         return render_template("job_pilot_page.html", doc=doc)
 
     # ------------------------------------------------------------------ supervision

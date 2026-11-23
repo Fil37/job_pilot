@@ -998,7 +998,14 @@
    "broadening": "élargissement",
    "gap": "combler un manque",
    "improves": "améliore",
-   "offer(s)": "offre(s)"
+   "offer(s)": "offre(s)",
+   "Hover or focus an item for its details": "Survole un élément pour voir son détail",
+   "optional": "facultatif",
+   "Role": "Rôle",
+   "To check": "À vérifier",
+   "Example": "Exemple",
+   "Alternative": "Alternative",
+   "Hardware (one per line: name | role | to check | example | alternative | facultatif)": "Matériel (un par ligne : nom | rôle | à vérifier | exemple | alternative | facultatif)"
   }
  },
  "skill_text": {
