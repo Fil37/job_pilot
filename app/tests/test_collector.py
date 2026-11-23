@@ -102,7 +102,7 @@ def test_missing_credentials_is_not_configured_and_a_failing_source_gives_partia
 
 
 def test_title_domain_words_are_enough():
-    """Incident 2026-11-21: Alice & Bob 'Electronics Integration Engineer' was skipped (check TITLE_DOMAIN_TOKENS);
+    """Incident 2026-11-21: a real offer 'Electronics Integration Engineer' was skipped (check TITLE_DOMAIN_TOKENS);
     'Office Manager' and 'Software Engineer' stay out for an electronics / embedded search."""
     from app.agent.agent002_offer_collector import _title_wanted
     terms = {"title": ["electronics engineer", "ingenieur systemes embarques", "ingenieur fpga"], "core_skill": ["vhdl"]}

@@ -31,7 +31,7 @@ from app.agent import ROOT, BaseAgent, RunContext, envelope, make_llm, sha, upse
 from app.agent.common_profile import load_profile
 from app.agent.common_company import company_lines
 from app.agent.common_llm import ask_with_corrections
-from app.agent.common_profile import fact_problems, profile_corpus
+from app.agent.common_profile import candidate_target, fact_problems, profile_corpus
 
 SKILLS = [
     {"skill_id": "SK_INTERVIEW_SHEET", "version": "1", "status": "proposed",
@@ -47,7 +47,8 @@ SKILLS = [
 ]
 
 AGENT_ID = "agent010"
-SHEET_PROMPT = """You prepare a French interview sheet for a junior embedded / electronics engineer. Answer in JSON only:
+SHEET_PROMPT = """You prepare a French interview sheet for the candidate described in "candidate_target" (his headline,
+target roles and months of experience). Answer in JSON only:
 {"offer_summary": "...", "company_summary": "...", "likely_questions": [{"question": "...", "hint": "..."}],
  "weak_points": [{"point": "...", "answer_elements": "..."}], "questions_to_ask": ["..."]}
 Rules: French; 6 to 10 likely technical questions tied to the offer; 2 to 4 weak points taken from the missing skills
@@ -59,7 +60,7 @@ only: {"text": "..."}. 60 to 110 words, "vous", polite, mention the job title an
 sentence the candidate's fit using ONLY the facts given, propose to send more information. No greeting line with a
 name, no signature block (the candidate adds them)."""
 TEMPLATE = ("Bonjour,\n\nJe me permets de revenir vers vous au sujet de ma candidature au poste de {title}, envoyée le "
-            "{date}. Ce poste correspond pleinement à mon parcours en systèmes embarqués et électronique, et ma motivation "
+            "{date}. Ce poste correspond pleinement à mon profil ({headline}), et ma motivation "
             "pour en discuter avec vous reste entière. Je peux vous transmettre tout complément d'information utile.\n\nBien cordialement,")
 
 
@@ -143,7 +144,8 @@ class Agent(BaseAgent):
             a, o, missing, exp_reason, cv, folder = self._context(ctx, sub["application_id"])
             client = client or make_llm(ctx, AGENT_ID)
             if sub["kind"] == "sheet":
-                payload = {"offer": {"title": o["title"], "company": o["company"], "text": o["description"][:2500]},
+                payload = {"candidate_target": candidate_target(profile, ctx.instance["criteria"]),
+                           "offer": {"title": o["title"], "company": o["company"], "text": o["description"][:2500]},
                            "company_facts": company_lines(ctx, o["company"]), "cv_sent": cv,
                            "missing_skills": missing, "experience_note": exp_reason}
 
@@ -202,7 +204,8 @@ class Agent(BaseAgent):
 
                 ans, probs, n = ask_with_corrections(client, FOLLOWUP_PROMPT, facts, check_f, purpose="followup",
                                                      ctx=ctx, max_corrections=max_corr)
-                text = ans["text"].strip() if ans else TEMPLATE.format(title=o["title"], date=sent_day)
+                text = ans["text"].strip() if ans else TEMPLATE.format(title=o["title"], date=sent_day,
+                                                                       headline=candidate_target(profile, ctx.instance["criteria"])["headline"].lower())
                 if not ans:
                     warnings.append(f"follow-up {a['application_id']}: fixed template used ({'; '.join(probs)[:100]})")
                 draft_id = "f_" + sha(a["application_id"], 12)

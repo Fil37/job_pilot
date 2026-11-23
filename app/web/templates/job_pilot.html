@@ -108,13 +108,13 @@
       <strong>{{ b.title }}</strong><span class="chip">{{ _({'reinforce': 'reinforcement', 'broaden': 'broadening'}.get(b.kind, 'gap')) }}</span>{% if b.covers %}<span class="chip">{{ _('improves') }} {{ b.covers }} {{ _('offer(s)') }}</span>{% endif %}<span class="small faint">{{ b.skill }} · {{ b.created_at[:10] }}{% if b.done_on %} · {{ _('done on') }} {{ b.done_on }}{% endif %}{% if b.publish_at %} · {{ b.publish_at.replace('T', ' ') }}{% endif %}{% if b.expire_at %} → {{ b.expire_at.replace('T', ' ') }}{% endif %}</span>
       <a class="button ghost small" href="{{ url_for('document', kind='brief', ref=b.brief_id) }}">{{ _('Open the brief') }}</a>
       <a class="button ghost small" href="{{ url_for('brief_done', brief_id=b.brief_id) }}">✓ {{ _('Project done') }}</a>
-      <form method="post" action="{{ url_for('brief_demo', brief_id=b.brief_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost small"{% if busy %} disabled{% endif %}>{{ _('demo') }}</button></form>
+      {% if has_portfolio %}<form method="post" action="{{ url_for('brief_demo', brief_id=b.brief_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost small"{% if busy %} disabled{% endif %}>{{ _('demo') }}</button></form>
       {% if b.entry_id %}<a class="button ghost small" href="{{ url_for('portfolio_demo', entry_id=b.entry_id, name='index.html') }}" target="_blank" rel="noopener">{{ _('Open the demo') }}</a>
       {% if b.entry_status in ('demo', 'failed', 'expired') %}<form method="post" action="{{ url_for('entry_publish', entry_id=b.entry_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
         <label class="small">{{ _('Project done on') }} <input type="text" name="done_on" value="{{ b.done_on or '' }}" placeholder="AAAA-MM" pattern="\d{4}(-\d{2}(-\d{2})?)?" required></label>
         <label class="small">{{ _('Publication date') }} <input type="datetime-local" name="publish_at" required></label>
         <label class="small">{{ _('End date (optional)') }} <input type="datetime-local" name="expire_at"></label>
-        <button class="small">{{ _('Publish on the portfolio') }}</button></form>{% endif %}{% endif %}
+        <button class="small">{{ _('Publish on the portfolio') }}</button></form>{% endif %}{% endif %}{% endif %}
       {% if b.error %}<span class="small faint">{{ b.error }}</span>{% endif %}</li>{% endfor %}</ul>
     {% else %}<p class="empty small"><span class="big">🛠</span>{{ _('No project idea yet.') }}</p>{% endif %}
   </section>

@@ -266,6 +266,9 @@ def test_project_done_sheet_makes_the_card():
     import io
     import json as _json
     orch, cl = client()
+    # a user's own portfolio (job_pilot.json overrides.portfolio): repository and filter categories
+    orch.config["portfolio"].update(repo="https://github.com/someone/someone.github.io.git",
+                                    categories={"fpga": "FPGA / SoC", "firmware": "Embarqué"})
     with sqlite3.connect(orch.db_path) as c:
         c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) VALUES "
                   "('b_d','verilog','Filtre FIR',?, ?,'proposed','r','2026-11-23')",
@@ -316,6 +319,23 @@ def test_the_project_page_links_its_offer():
     with c:
         c.execute("UPDATE offers SET url='javascript:alert(1)'")
     assert "javascript:" not in cl.get("/docs/brief/b_l").data.decode()
+
+
+def test_without_a_portfolio_nothing_about_publishing_is_shown():
+    """For other users (PORTFOLIO_OPTIONAL): no repository configured → no demo / publish buttons, agent008 has nothing
+    to do and says so; the sheet does not ask for categories."""
+    import json as _json
+    orch, cl = client()
+    assert not orch.config["portfolio"]["repo"]
+    with sqlite3.connect(orch.db_path) as c:
+        c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) VALUES "
+                  "('b_n','kafka','Projet',?,'x','proposed','r','2026-11-23')", (_json.dumps({"title": "Projet"}),))
+    page = cl.get("/").data.decode()
+    assert "Projet" in page and "/briefs/b_n/demo" not in page
+    r = orch.run("portfolio")
+    assert r["status"] == "succeeded"
+    orch.act("agent007", "save_project_sheet", brief_id="b_n", form={"done_on": "2025-01", "short_name": "P", "title": "T",
+             "summary": "S"}, categories=[], figures=[])
 
 
 if __name__ == "__main__":

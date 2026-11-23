@@ -112,7 +112,8 @@ def register(app, orch: Orchestrator) -> None:
     @app.context_processor
     def inject():
         theme = request.cookies.get("theme")
-        return {"labels": {"app_title": "Job Pilot", "version": "v0.4", "css_file": "job_pilot_master.css"},
+        return {"has_portfolio": bool(orch.config["portfolio"].get("repo")),
+                "labels": {"app_title": "Job Pilot", "version": "v0.5", "css_file": "job_pilot_master.css"},
                 "lang": g.lang, "theme": theme if theme in ("light", "dark") else "auto", "_": translate,
                 "csrf": session.get("csrf"), "csp_nonce": g.csp_nonce, "error": None,
                 "reasons": words["experience_reasons"], "elim": words["elimination_reasons"]}

@@ -47,7 +47,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | France Travail (pages publiques) | pages métier × département des plans du site officiels (tous les départements avec `mobility_france`, tes zones d'abord, 200 requêtes au plus) ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; **texte complet** de chaque offre lu ensuite dans le JSON que sa page publique charge elle-même (`/api-descriptifoffre/offre/<id>`, autorisé par le robots.txt), 250 offres au plus par passage, les plus récentes d'abord | active |
 | France Travail (API) | fermée aux nouvelles applications depuis 2026-10 (data.gouv.fr) ; tes identifiants n'obtiennent que le droit « application » | désactivée |
 | Offres collées à la main | formulaire de l'accueil (LinkedIn, Indeed, tout site) | active |
-| Greenhouse, Lever | API publiques de job boards des entreprises cibles (Alice & Bob) | active |
+| Greenhouse, Lever | API publiques de job boards des entreprises que tu suis (dans job_pilot.json) | active |
 | HelloWork | CGU 8.2 : scraping « strictement interdit, commerciales ou non » | jamais (alertes e-mail) |
 | Welcome to the Jungle | CGU : robots / extraction automatisée interdits | jamais (alertes e-mail) |
 | Meteojob | CGU : extraction des bases de données interdite | jamais (alertes e-mail) |

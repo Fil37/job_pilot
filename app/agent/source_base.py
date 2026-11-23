@@ -64,7 +64,7 @@ def make_offer(words: dict, *, source_id, external_id, title, company, url, desc
 
 
 def _title_wanted(title: str, terms: dict) -> bool:
-    # TITLE_DOMAIN_TOKENS (real case 2026-11-21, Alice & Bob "Electronics Integration Engineer" was skipped because
+    # TITLE_DOMAIN_TOKENS (real case 2026-11-21, a real offer "Electronics Integration Engineer" was skipped because
     # no full title such as "electronics engineer" appears in it): a domain word of your titles is enough.
     f = fold(title)
     # TITLE_SHORT_SKILL (real case 2026-11-23, Arbeitnow: your skill 'c' kept "Product Manager Insurance P&C" and C#/.NET

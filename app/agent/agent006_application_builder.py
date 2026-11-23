@@ -84,7 +84,7 @@ CHECKS = [
     ("LETTER_FACTS_FROM_PROFILE", "chaque chiffre et chaque technologie de la lettre figure dans profile.yaml", "rule of the user"),
     ("SUMMARY_WORDS_FROM_PROFILE", "chaque mot porteur de sens du titre, de l'accroche et du profil proposés par le modèle figure "
      "dans profile.yaml",
-     "2026-11-21 Alice & Bob CV: 'avec un souci de robustesse et de maintenabilité' added by the model"),
+     "2026-11-21, CV for a real offer: 'avec un souci de robustesse et de maintenabilité' added by the model"),
 ]
 LABELS_FR = {"headline": "Titre", "tagline": "Accroche", "summary": "Résumé"}
 SECTIONS = ("Compétences techniques", "Expériences professionnelles", "Projets", "Formation")
@@ -210,7 +210,7 @@ def cv_offer_match(cv_text: str, req: set[str], have: set[str], lexicon: dict, a
     lacking = sorted(s for s in req if s not in present and s not in have)
     title_words = domain_tokens([offer_title])
     head = {w.rstrip("s") for w in re.split(r"[^a-z0-9+#]+", fold(headline))}
-    # CV_OFFER_MATCH (real case 2026-11-23, Alice & Bob: "electronic" of an English offer was not seen in your French
+    # CV_OFFER_MATCH (real case 2026-11-23: "electronic" of an English offer was not seen in your French
     # title "électronique"): a word counts when both share their beginning, all but their last 2 letters at most
     # (5 letters at least: "electroni-c" / "electroni-que", "integration" / "intégration")
     def near(a, b):

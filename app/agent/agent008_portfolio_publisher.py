@@ -2,7 +2,7 @@
 
 Objective        : show a project brief as a card of your real portfolio (local demo, nothing published), then,
                    after your approval, publish it on the date you chose and remove it at the end date if you set one.
-Scope            : ONE repository and ONE file (settings.portfolio: Fil37.github.io, index.html); the card is inserted
+Scope            : ONE repository and ONE file (YOUR portfolio, job_pilot.json overrides.portfolio; optional); the card is inserted
                    at the top of the project grid between <!-- job_pilot:begin SLUG --> / <!-- job_pilot:end SLUG -->
                    markers, so it can be replaced or removed without touching anything else.
 Out of scope     : NEVER pushes without an approved 'publish_portfolio_entry' whose target is the entry and whose
@@ -172,6 +172,8 @@ class Agent(BaseAgent):
     SKILLS = SKILLS
 
     def plan(self, ctx: RunContext):
+        if not ctx.config["portfolio"].get("repo"):    # PORTFOLIO_OPTIONAL: no portfolio configured, nothing to do
+            return [{"objective": "no portfolio configured (optional)", "kind": None}]
         if ctx.params.get("brief_id"):
             return [{"objective": "render the demo", "kind": "demo", "brief_id": ctx.params["brief_id"]}]
         now = datetime.now().isoformat(timespec="minutes")
@@ -324,10 +326,13 @@ class Agent(BaseAgent):
         return {"entry_id": entry_id, "commit": commit, "message": f"Portfolio : projet « {b['title']} » {verb} ({commit[:7]})"}
 
     def healthcheck(self, ctx=None):
+        if ctx and not ctx.config["portfolio"].get("repo"):
+            return "healthy", "pas de portfolio configuré (facultatif) : rien à publier"
         if not shutil.which("git"):
             return "critical", "git absent"
         if ctx and not os.environ.get(ctx.config["portfolio"]["token_env"]):
-            return "degraded", "GITHUB_TOKEN absent du .env : les démos marchent, pas la publication"
+            return "degraded", (f"{ctx.config['portfolio']['token_env']} absent des secrets : les démos marchent, "
+                                "pas la publication")
         return "healthy", "git présent, jeton configuré"
 
 

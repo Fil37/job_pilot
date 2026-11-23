@@ -25,7 +25,7 @@ def test_invented_figure_or_technology_is_detected():
 
 
 def test_claims_absent_from_the_profile_are_detected():
-    """Incident 2026-11-21 (Alice & Bob CV, check SUMMARY_WORDS_FROM_PROFILE): 'avec un souci de robustesse et de
+    """Incident 2026-11-21 (CV for a real offer, check SUMMARY_WORDS_FROM_PROFILE): 'avec un souci de robustesse et de
     maintenabilité' was added by the model."""
     assert novel_words("Pipeline d'ingestion quotidien en Python", CORPUS) == []
     assert novel_words("avec un souci de robustesse et de maintenabilité", CORPUS) == ["maintenabilite", "robustesse"]
@@ -65,7 +65,7 @@ def test_correction_loop_names_the_defect_and_stops_after_three():
 
 def test_ats_check_ignores_accents_and_hyphenation_but_finds_missing_bullets():
     """Case CV_ATS_TEXT: 'Dévelop-\\npement' in the PDF text matches the bullet; a missing bullet is reported."""
-    text = "Franck Essome\nDévelop-\npement d'un firmware bare-metal en C\n"
+    text = "Prénom Nom\nDévelop-\npement d'un firmware bare-metal en C\n"
     assert ats_problems(text, ["Développement d'un **firmware bare-metal en C**"]) == []
     assert ats_problems(text, ["Accéléromètre MEMS capacitif"])
 

@@ -290,21 +290,15 @@
    "broaden_min_offers": 5
   },
   "portfolio": {
-   "repo": "https://github.com/Fil37/Fil37.github.io.git",
+   "repo": "",
    "branch": "main",
    "file": "index.html",
    "grid_marker": "<div class=\"proj-grid\">",
    "token_env": "GITHUB_TOKEN",
    "author_name": "job_pilot",
-   "note": "Push only after an approved publish_portfolio_entry, at its publish_at; removal at expire_at.",
+   "note": "Optional. Your own portfolio goes in app/instance/job_pilot.json overrides.portfolio (repo, categories, grid_marker...); empty repo = portfolio features off. Push only after an approved publish_portfolio_entry.",
    "assets_dir": "portfolio-assets",
-   "categories": {
-    "edge": "Vision & IA",
-    "fpga": "FPGA / SoC",
-    "firmware": "Embarqué & temps réel",
-    "capteurs": "Capteurs & MEMS",
-    "genai": "IA générative"
-   },
+   "categories": {},
    "image_max_bytes": 2000000
   },
   "analyst": {

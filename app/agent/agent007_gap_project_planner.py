@@ -33,7 +33,7 @@ from pathlib import Path
 
 from app.agent.common_projects import (HW_KEYS, hw_item, image_problem, parse_done_on)  # noqa: F401 - shared, see common_projects.py
 from app.agent import NotFound, ROOT, BaseAgent, RunContext, db_connect, envelope, fold, make_llm, sha, upsert, utc_now
-from app.agent.common_profile import load_profile, own_skills
+from app.agent.common_profile import candidate_target, load_profile, own_skills
 from app.agent.common_scoring import (coverage_lines, gain_lines, offer_skills, offers_gain, project_gain,
                                              skill_alternatives, skill_label)
 from app.agent.common_llm import ask_with_corrections
@@ -61,15 +61,17 @@ SKILLS = [
 ]
 
 AGENT_ID = "agent007"
-BRIEF_PROMPT = """You design a realistic personal project of 1 to 2 weeks for a junior embedded / electronics engineer, so
-that he can learn the skills ONE job offer asks for and he does not have yet. Answer in JSON only, exactly:
+BRIEF_PROMPT = """You design a realistic personal project of 1 to 2 weeks for the candidate described in "candidate_target"
+(his headline, the roles he targets, his months of experience), so that he can learn the skills ONE job offer asks for
+and he does not have yet. Answer in JSON only, exactly:
 {"title": "...", "objective": "...", "portfolio_summary": "...", "builds_on": ["skill", ...], "architecture": "...",
  "hardware": [{"name": "...", "role": "...", "specs": "...", "example": "...", "alternative": "...", "optional": false}],
  "software": ["..."], "steps": [{"days": "J1-J2", "milestone": "...", "deliverable": "..."}],
  "success_criteria": ["..."], "pitfalls": ["..."], "interview_pitch": "..."}
 Rules: French; every target skill is central and named; the project fits the context of the offer (its domain, its
 products) when the offer says it; builds_on lists 2 to 5 skills taken ONLY from the candidate's skills;
-cheap and available hardware (or simulation); every hardware item details: role = what it does in THIS project,
+cheap and available hardware (or simulation); "hardware": [] when the project is software only; every hardware item
+details: role = what it does in THIS project,
 specs = the characteristics to check when choosing it (voltage, interface, pins, resolution...), example = one common
 reference (a model name, never a price), alternative = a cheaper option or a simulation, optional = true if the
 project works without it; 4 to 7 steps covering at most 10 working days (J1 to J10);
@@ -145,7 +147,7 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
     return "\n".join(md) + "\n"
 
 
-HARDWARE_PROMPT = """For each hardware item of this junior electronics project, give its details. Answer in JSON only:
+HARDWARE_PROMPT = """For each hardware item of this project, give its details. Answer in JSON only:
 {"items": [{"role": "...", "specs": "...", "example": "...", "alternative": "...", "optional": false}]}, one object per
 item, SAME order and SAME count as "hardware". French. role = what it does in THIS project; specs = what to check when
 choosing it (voltage, interface, pins, resolution...); example = one common reference (a model name, never a price);
@@ -262,10 +264,10 @@ class Agent(BaseAgent):
 
     def _check(self, skills, own, alternatives=None):
         def check(ans):
-            need = ("title", "objective", "portfolio_summary", "builds_on", "architecture", "hardware", "software", "steps",
+            need = ("title", "objective", "portfolio_summary", "builds_on", "architecture", "software", "steps",
                     "success_criteria", "pitfalls", "interview_pitch")
-            if not isinstance(ans, dict) or any(not ans.get(k) for k in need):
-                return [f"every key is required: {list(need)}"]
+            if not isinstance(ans, dict) or any(not ans.get(k) for k in need) or not isinstance(ans.get("hardware"), list):
+                return [f"every key is required: {list(need)} and 'hardware' (a list, [] if software only)"]
             probs = []
             hw_bad = [h for h in ans["hardware"] if not isinstance(h, dict) or not all(
                 isinstance(h.get(k), str) and h.get(k).strip() for k in ("name", "role", "specs"))]
@@ -377,7 +379,8 @@ class Agent(BaseAgent):
                 payload = {"project_kind": kind, "target_skills": skills, "offers_asking": titles,
                            **({"known_alternative": job["known"]} if kind == "broaden" else {})}
                 item, brief_id = f"{kind}:{skills[0]}", "b_" + sha(f"{kind}:{skills[0]}", 12)
-            payload.update({"candidate_skills": sorted(own),
+            payload.update({"candidate_target": candidate_target(profile, ctx.instance["criteria"]),
+                            "candidate_skills": sorted(own),
                             "candidate_projects": [p["name"] for p in profile.get("projects") or []]})
             ans, probs, nc = ask_with_corrections(client, BRIEF_PROMPT, payload, self._check(skills, own, alternatives),
                                                   purpose="project_brief", ctx=ctx,
@@ -524,8 +527,9 @@ def action_save_project_sheet(orch, *, brief_id: str, form: dict, categories: li
         raise ValueError("Give the real date of the project (not in the future).") from None
     if f["link_url"] and not re.fullmatch(r"https://[^\s\"'<>]+", f["link_url"]):
         raise ValueError("The link must start with https://")
-    cats = [x for x in categories if x in orch.config["portfolio"].get("categories", {})]
-    if not cats:
+    known = orch.config["portfolio"].get("categories", {})
+    cats = [x for x in categories if x in known]
+    if known and not cats:                       # a portfolio without filters: no category asked
         raise ValueError("Choose at least one category of your portfolio.")
     if not (f["position"] in ("first", "last") or f["position"].startswith("after:")):
         f["position"] = "first"

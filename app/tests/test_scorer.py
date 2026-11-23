@@ -66,7 +66,7 @@ def test_short_skill_names_do_not_match_inside_words():
 
 
 def test_mobility_france_accepts_france_and_refuses_abroad():
-    """Case: your CV 'Mobilité France, dont Mulhouse' and your rule 2026-11-23 'mobile dans toute la France' (check
+    """Case: a CV saying 'Mobilité France' and the rule 2026-11-23 'mobile dans toute la France' (check
     MOBILITY_FRANCE): Toulouse 1.0 like Paris (zone), 'New York, USA' eliminated."""
     crit = dict(CRIT, mobility_france=True)
     assert score_offer(offer(location="31 - Toulouse"), "keep", TERMS, PROFILE, crit, W, SCORING)["components"]["values"]["location"] == 1.0

@@ -69,7 +69,7 @@ def fact_problems(text: str, corpus: str, lexicon: dict) -> list[str]:
 
 
 def novel_words(text: str, corpus: str) -> list[str]:
-    """SUMMARY_WORDS_FROM_PROFILE (real case 2026-11-21, Alice & Bob CV: the model added "avec un souci de robustesse
+    """SUMMARY_WORDS_FROM_PROFILE (real case 2026-11-21, a real CV: the model added "avec un souci de robustesse
     et de maintenabilité", a claim absent from your profile): every meaningful word (7+ letters) of a model text must
     exist in the profile (singular / plural ignored)."""
     def bag(t):
@@ -86,4 +86,19 @@ def own_skills(profile: dict) -> set[str]:
             for b in it.get("bullets") or [] for x in b.get("skills") or []}
     own |= {fold(x) for x in profile.get("skills_written") or []}
     return own
+
+
+def candidate_target(profile: dict, criteria: dict) -> dict:
+    """PROMPTS_FROM_PROFILE (2026-11-23, for other users: the prompts said "junior embedded / electronics engineer"):
+    who the candidate is, from HIS profile and criteria: headline, target roles, months of experience."""
+    from app.agent import month_index
+    months = 0
+    for e in profile.get("experiences") or []:
+        try:
+            months += max(0, month_index(str(e.get("end", "present"))) - month_index(str(e["start"])) + 1)
+        except (KeyError, ValueError):
+            pass
+    ident = profile.get("identity") or {}
+    return {"headline": (ident.get("headline_variants") or [""])[0], "target_roles": list(criteria.get("roles") or []),
+            "experience_months": months}
 
