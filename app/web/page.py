@@ -27,6 +27,13 @@ WEB_CHAINS = ("daily", "rescore", "inbox", "weekly", "portfolio")
 LINK_RX = re.compile(r"(https?://[^\s<>()]+[^\s<>().,;:!?»])")
 
 
+def label_skills(skill_csv: str, alts_json) -> str:
+    """'verilog ou vhdl' when the offer accepts either (SKILL_ALTERNATIVES)."""
+    from app.agent.agent004_offer_scorer import skill_label
+    alts = json.loads(alts_json) if isinstance(alts_json, str) else (alts_json or {})
+    return ", ".join(skill_label(x.strip(), alts) for x in (skill_csv or "").split(","))
+
+
 def inline_md(text: str) -> str:
     """Escape FIRST (contents of offers, mails and model answers are data), then **bold** and links."""
     out = html.escape(text, quote=True)
@@ -166,9 +173,12 @@ def register(app, orch: Orchestrator) -> None:
                 "USING(offer_id) ORDER BY a.created_at DESC LIMIT 50")]
             briefs = [dict(r) for r in c.execute(
                 "SELECT b.brief_id, b.skill, b.title, b.status, b.created_at, json_extract(b.brief, '$.done_on') AS done_on, "
+                "json_extract(b.brief, '$.alternatives') AS alts, "
                 "p.entry_id, p.status AS entry_status, "
                 "p.publish_at, p.expire_at, p.error FROM project_briefs b LEFT JOIN portfolio_entries p USING(brief_id) "
                 "ORDER BY b.created_at DESC LIMIT 10")]
+            for br in briefs:
+                br["skill"] = label_skills(br["skill"], br.pop("alts", None))
             gaps = [dict(r) for r in c.execute("SELECT skill, offers_count, covered, triggered FROM skill_gaps WHERE window_end="
                                                "(SELECT MAX(window_end) FROM skill_gaps) ORDER BY offers_count DESC LIMIT 8")]
         example = bool(prof and json.loads(prof[0]).get("example"))
@@ -318,13 +328,14 @@ def register(app, orch: Orchestrator) -> None:
             mails = [dict(r) for r in c.execute(f"SELECT * FROM email_events WHERE application_id IN ({q}) ORDER BY received_at DESC", ids)]
             sheets = [dict(r) for r in c.execute(f"SELECT * FROM interview_sheets WHERE application_id IN ({q})", ids)]
             drafts = [dict(r) for r in c.execute(f"SELECT * FROM followup_drafts WHERE application_id IN ({q})", ids)]
-            briefs = [dict(r) for r in c.execute("SELECT brief_id, skill, title, status FROM project_briefs WHERE offer_id=?",
-                                                 (offer_id,))]
+            briefs = [dict(r) for r in c.execute("SELECT brief_id, skill, title, status, json_extract(brief, '$.alternatives') "
+                                                 "AS alts FROM project_briefs WHERE offer_id=?", (offer_id,))]
             from app.agent.agent004_offer_scorer import project_gain
             for br in briefs:                       # PROJECT_GAIN, computed now (your profile may have changed)
                 br["gain"] = project_gain(c, offer_id, [x.strip() for x in br["skill"].split(",")],
                                           criteria=orch.instance["criteria"], words=orch.schemas["words"],
                                           scoring=orch.config["scoring"])
+                br["skill"] = label_skills(br["skill"], br.pop("alts", None))
         company = {"facts": json.loads(comp[0]), "confidence": comp[1], "updated_at": comp[2]} if comp else None
         for sh in sheets:
             pth = Path(sh["path"])

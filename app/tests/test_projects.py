@@ -341,5 +341,56 @@ def test_project_gain_between_optimal_cv_without_and_with_the_project():
     assert "**60 %** sans le projet, **80 %** avec lui (**+20 points**)" in gain_lines(g)[0]
 
 
+def test_a_project_for_an_offer_accepting_either_skill_says_the_choice():
+    """Request of the user 2026-11-23 (SKILL_ALTERNATIVES): when the offer says « VHDL et/ou Verilog », the project
+    stays proposed but names the choice (doable in VHDL); a title without the choice is sent back to the model."""
+    from app.agent import fold
+    from app.agent.agent004_offer_scorer import skill_alternatives, skill_label
+    lex = {"vhdl": ["vhdl"], "verilog": ["verilog"], "c": ["c"], "python": ["python"]}
+    assert skill_alternatives(fold("Maîtrise du VHDL et/ou Verilog, Python"), {"vhdl", "verilog", "python"}, lex) == \
+        {"verilog": ["vhdl"], "vhdl": ["verilog"]}
+    assert skill_alternatives(fold("VHDL, Verilog et Python"), {"vhdl", "verilog", "python"}, lex) == {}
+    assert skill_label("verilog", {"verilog": ["vhdl"]}) == "verilog ou vhdl"
+    # real case 2026-11-23 (Astek): « FPGA /VHDL », « FPGA et ou VERILOG »: FPGA is not a language one can pick instead
+    groups = [["vhdl", "verilog"]]
+    lex2 = {**lex, "fpga": ["fpga"]}
+    assert skill_alternatives(fold("FPGA /VHDL ; FPGA et ou VERILOG ; VHDL et ou Verilog"), {"fpga", "vhdl", "verilog"},
+                              lex2, groups) == {"verilog": ["vhdl"], "vhdl": ["verilog"]}
+    tmp = Path(tempfile.mkdtemp())
+    orch = make_orch(tmp)
+    with sqlite3.connect(orch.db_path) as c:
+        seed_offer(c, orch.schemas["rows"], "o1", 80, ["verilog"])
+        c.execute("UPDATE offers SET description='Conception FPGA en VHDL et/ou Verilog.'")
+    answers = [dict(BRIEF, title="Filtre FIR en Verilog", objective="Un filtre FIR en Verilog simulé.",
+                    portfolio_summary="Filtre FIR simulé.", software=["Icarus Verilog"]),
+               dict(BRIEF, title="Filtre FIR en Verilog ou VHDL", objective="Un filtre FIR en Verilog ou VHDL.",
+                    portfolio_summary="Filtre FIR simulé.", software=["Icarus Verilog", "GHDL"])]
+    from app.agent import agent000_job_pilot as a0
+    original = a0.Orchestrator._ctx
+    asked = []
+
+    def ctx_with_model(self, *a, **k):
+        ctx = original(self, *a, **k)
+
+        def transport(url, headers, body, timeout):
+            asked.append(body["messages"])
+            return 200, {"choices": [{"message": {"content": json.dumps(answers[min(len(asked), 2) - 1])}}],
+                         "usage": {"prompt_tokens": 100, "completion_tokens": 50}}
+        ctx.llm_transport = transport
+        return ctx
+    a0.Orchestrator._ctx = ctx_with_model
+    try:
+        with env_vars(DEEPSEEK_API_KEY="test-key-long"):
+            orch.run(None, only=["agent007"])
+    finally:
+        a0.Orchestrator._ctx = original
+    assert '"accepted_alternatives": {"verilog": ["vhdl"]}' in asked[0][1]["content"]
+    assert len(asked) == 2 and "title must name the choice" in asked[1][-1]["content"]
+    c = sqlite3.connect(orch.db_path)
+    title, brief, path = c.execute("SELECT title, brief, path FROM project_briefs").fetchone()
+    assert title == "Filtre FIR en Verilog ou VHDL" and json.loads(brief)["alternatives"] == {"verilog": ["vhdl"]}
+    assert "Compétence(s) visée(s) : **verilog ou vhdl** (l'offre accepte l'une ou l'autre" in Path(path).read_text()
+
+
 if __name__ == "__main__":
     run_main(globals())

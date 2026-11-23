@@ -1334,5 +1334,51 @@
     "Le résumé public doit décrire ce qui est construit : retire \\1"
    ]
   ]
+ },
+ "skill_alternative_groups": {
+  "_doc": "SKILL_ALTERNATIVES (2026-11-23): only skills of the same group can replace each other when an offer writes « X ou Y », « X et/ou Y », « X/Y ».",
+  "groups": [
+   [
+    "vhdl",
+    "verilog",
+    "systemverilog"
+   ],
+   [
+    "altium",
+    "kicad",
+    "eagle",
+    "orcad"
+   ],
+   [
+    "quartus",
+    "vivado"
+   ],
+   [
+    "modelsim",
+    "questa"
+   ],
+   [
+    "c",
+    "c++"
+   ],
+   [
+    "rtos",
+    "zephyr",
+    "freertos"
+   ],
+   [
+    "stm32",
+    "esp32",
+    "arduino"
+   ],
+   [
+    "matlab",
+    "labview"
+   ],
+   [
+    "python",
+    "c#"
+   ]
+  ]
  }
 }

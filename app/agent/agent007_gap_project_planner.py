@@ -33,7 +33,7 @@ from pathlib import Path
 
 from app.agent import ROOT, BaseAgent, RunContext, envelope, fold, make_llm, sha, upsert, utc_now
 from app.agent.agent001_profile_builder import load_profile
-from app.agent.agent004_offer_scorer import gain_lines, project_gain
+from app.agent.agent004_offer_scorer import gain_lines, offer_skills, project_gain, skill_alternatives, skill_label
 from app.agent.agent006_application_builder import ask_with_corrections
 
 SKILLS = [
@@ -68,7 +68,10 @@ products) when the offer says it; builds_on lists 2 to 5 skills taken ONLY from 
 cheap and available hardware (or simulation); 4 to 7 steps covering at most 10 working days (J1 to J10);
 measurable success criteria; interview_pitch in 3-4 sentences, without claiming results that do not exist yet;
 portfolio_summary: 1-2 sentences for a PUBLIC portfolio card describing what the project builds, never mentioning a
-missing skill, learning or results not obtained yet."""
+missing skill, learning or results not obtained yet.
+When "accepted_alternatives" gives, for a target skill, other skills the offer accepts instead (the offer says
+"VHDL ou Verilog", "VHDL et/ou Verilog"...), the project must be doable with EITHER: write the choice in the title
+(e.g. "... en Verilog ou VHDL"), in the objective and in the steps, and say the candidate may use the one he knows."""
 PUBLIC_FORBIDDEN = ("manquant", "lacune", "apprendre", "acquerir la competence", "monter en competence", "missing skill")
 
 
@@ -88,7 +91,10 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
         where = " chez ".join(x for x in (offer.get("title"), offer.get("company")) if x)
         md += [f"Offre visée : **{where}**" + (f" ({offer['location']})" if offer.get("location") else ""), ""]
     score = f" (score de l'offre : {offer['score']:.0f}/100)" if offer and offer.get("score") is not None else ""
-    md += [f"Compétence(s) à acquérir : **{', '.join(skills)}**{score}", "",
+    alts = ans.get("alternatives") or {}
+    labels = ", ".join(skill_label(x, alts) for x in skills)
+    choice = " (l'offre accepte l'une ou l'autre : fais-le dans celle que tu préfères)" if alts else ""
+    md += [f"Compétence(s) visée(s) : **{labels}**{choice}{score}", "",
            *(["## Gain attendu pour cette offre", "", *gain_lines(ans["gain"]), ""] if ans.get("gain") else []),
            "## Objectif", "", ans["objective"], "", f"S'appuie sur : {', '.join(ans['builds_on'])}", "",
            "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [f"- {h}" for h in ans["hardware"]] + [
@@ -147,7 +153,7 @@ class Agent(BaseAgent):
         return [{"objective": "list the missing skills over the window"},
                 {"objective": "one brief per favourable offer missing 1-2 skills"}]
 
-    def _check(self, skills, own):
+    def _check(self, skills, own, alternatives=None):
         def check(ans):
             need = ("title", "objective", "portfolio_summary", "builds_on", "architecture", "hardware", "software", "steps",
                     "success_criteria", "pitfalls", "interview_pitch")
@@ -168,6 +174,12 @@ class Agent(BaseAgent):
             absent = [s for s in skills if fold(s) not in text]
             if absent:
                 probs.append(f"every target skill must be central and named; missing: {absent}")
+            # SKILL_ALTERNATIVES: the offer accepts either; the title says the choice
+            for s, alts in (alternatives or {}).items():
+                need = [x for x in [s, *alts] if fold(x) not in fold(ans.get("title", ""))]
+                if need:
+                    probs.append(f"the offer accepts {' or '.join([s, *alts])}: the title must name the choice "
+                                 f"(e.g. '... en {s} ou {alts[0]}'); missing in the title: {need}")
             return probs
         return check
 
@@ -194,10 +206,13 @@ class Agent(BaseAgent):
                 "SELECT s.offer_id, s.score, s.missing, s.eliminated, s.scored_at, COALESCE(d.user_override, d.decision) "
                 "decision FROM scores s JOIN experience_decisions d ON d.offer_id=s.offer_id AND d.profile_hash=s.profile_hash "
                 "JOIN offers o ON o.offer_id=s.offer_id WHERE s.scored_at>=? AND o.status!='expired'", (since,))]
-            briefed = {r[0] for r in c.execute("SELECT offer_id FROM project_briefs WHERE offer_id IS NOT NULL")}
+            briefed = {r[0] for r in c.execute("SELECT offer_id FROM project_briefs WHERE offer_id IS NOT NULL "
+                                               "AND status!='superseded'")}
         for r in rows:
             r["missing"] = json.loads(r["missing"])
         todo = offers_to_brief(rows, cfg, own, briefed)
+        if ctx.params.get("offer_ids"):              # a regeneration asked for given offers only
+            todo = [r for r in todo if r["offer_id"] in set(ctx.params["offer_ids"])]
         gaps = window_gaps(rows, cfg)
         wanted = {s for r in todo for s in r["missing"]}
         with ctx.connect() as c:
@@ -213,16 +228,22 @@ class Agent(BaseAgent):
             return envelope(ctx, AGENT_ID, "succeeded", data={**metrics}, metrics=metrics)
         client = make_llm(ctx, AGENT_ID)
         written, alerts, warnings, outcomes = [], [], [], []
-        for r in todo[:cfg["max_briefs_per_run"]]:
+        for r in todo[:int(ctx.params.get("max_briefs") or cfg["max_briefs_per_run"])]:
             with ctx.connect() as c:
                 o = dict(c.execute("SELECT offer_id, title, company, location, url, description FROM offers WHERE offer_id=?",
                                    (r["offer_id"],)).fetchone())
             o["score"] = r["score"]
             skills = r["missing"]
-            payload = {"target_skills": skills, "offer": {"title": o["title"], "company": o.get("company"),
-                       "description": (o.get("description") or "")[:2000]},
+            req = offer_skills(fold(o["title"] + "\n" + (o.get("description") or "")), ctx.words["skill_lexicon"],
+                               {x: "working" for x in own}, {})
+            alt_all = skill_alternatives(fold(o["title"] + "\n" + (o.get("description") or "")), req | set(skills),
+                                         ctx.words["skill_lexicon"], ctx.words["skill_alternative_groups"]["groups"])
+            alternatives = {x: alt_all[x] for x in skills if alt_all.get(x)}
+            payload = {"target_skills": skills, "accepted_alternatives": alternatives,
+                       "offer": {"title": o["title"], "company": o.get("company"),
+                                 "description": (o.get("description") or "")[:2000]},
                        "candidate_skills": sorted(own), "candidate_projects": [p["name"] for p in profile.get("projects") or []]}
-            ans, probs, n = ask_with_corrections(client, BRIEF_PROMPT, payload, self._check(skills, own),
+            ans, probs, n = ask_with_corrections(client, BRIEF_PROMPT, payload, self._check(skills, own, alternatives),
                                                  purpose="project_brief", ctx=ctx,
                                                  max_corrections=ctx.config["retries"]["llm_correction_max"])
             if not ans:
@@ -236,6 +257,8 @@ class Agent(BaseAgent):
                                     scoring=ctx.config["scoring"])
             if gain:
                 ans = {**ans, "gain": gain}
+            if alternatives:
+                ans = {**ans, "alternatives": alternatives}
             path = self._write(ctx, o, skills, ans, cfg["window_days"])
             with ctx.connect() as c:
                 upsert(c, ctx.rows, "project_briefs", {"brief_id": brief_id, "skill": ", ".join(skills), "title": ans["title"],
@@ -244,7 +267,7 @@ class Agent(BaseAgent):
             outcomes.append({"check": "BRIEF_STRUCTURE", "item": o["offer_id"], "outcome": "corrected" if n else "pass"})
             written.append({"brief_id": brief_id, "offer_id": o["offer_id"], "skills": skills, "path": str(path)})
             alerts.append({"kind": "immediate", "category": "project", "ref": brief_id,
-                           "message": f"Projet proposé pour « {o['title'][:70]} » ({', '.join(skills)}) : {ans['title']}"})
+                           "message": f"Projet proposé pour « {o['title'][:70]} » ({', '.join(skill_label(x, alternatives) for x in skills)}) : {ans['title']}"})
         ctx.store.record_outcomes(ctx.run_id, outcomes)
         metrics["briefs"] = len(written)
         status = "succeeded" if written or not warnings else "partial"

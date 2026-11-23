@@ -55,6 +55,40 @@ def offer_skills(text: str, lexicon: dict, profile_skills: dict, aliases: dict) 
     return found
 
 
+ALT_JOIN = r"\s*(?:\(?\s*et\s*/?\s*ou\s*\)?|ou bien|ou|or|and/or|/)\s*(?:en\s+|le\s+|la\s+)?"
+
+
+def skill_alternatives(text: str, skills: set[str], lexicon: dict, groups: list[list[str]] | None = None) -> dict[str, list[str]]:
+    """SKILL_ALTERNATIVES (real case 2026-11-23: 14 offers say « VHDL et/ou Verilog »): {skill: [skills the offer accepts
+    instead]} for the asked skills written side by side as « X ou Y », « X et/ou Y », « X/Y », « X or Y ».
+    'text' is folded."""
+    out: dict[str, set[str]] = {}
+    names = {s: sorted({fold(t) for t in [s, *lexicon.get(s, [])]}, key=len, reverse=True) for s in skills}
+    for a in skills:
+        for b in skills:
+            if a >= b or (groups is not None and not any(a in g and b in g for g in groups)):
+                continue                       # only interchangeable tools (same group of words.json) replace each other
+            for ta in names[a]:
+                hit = False
+                for tb in names[b]:
+                    rx = (rf"(?<![a-z0-9]){re.escape(ta)}(?![a-z0-9]){ALT_JOIN}{re.escape(tb)}(?![a-z0-9])|"
+                          rf"(?<![a-z0-9]){re.escape(tb)}(?![a-z0-9]){ALT_JOIN}{re.escape(ta)}(?![a-z0-9])")
+                    if re.search(rx, text):
+                        out.setdefault(a, set()).add(b)
+                        out.setdefault(b, set()).add(a)
+                        hit = True
+                        break
+                if hit:
+                    break
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def skill_label(skill: str, alternatives: dict | None) -> str:
+    """'verilog ou vhdl' when the offer accepts either (SKILL_ALTERNATIVES), else the skill."""
+    alts = (alternatives or {}).get(skill) or []
+    return " ou ".join([skill, *alts])
+
+
 def in_france(offer: dict, loc: str, criteria: dict, words: dict) -> bool:
     """FRANCE_POSITIVE (real case 2026-11-23: Arbeitnow offers in 'Hamburg' or 'Dortmund' would have counted as France
     because only a list of foreign places was checked): a place counts as France when the source only publishes French
