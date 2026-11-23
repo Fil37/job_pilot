@@ -33,7 +33,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | agent004_offer_scorer | score = somme pondérée, satisfait / manques, éliminations avec raison | construit |
 | agent005_company_researcher | fiche entreprise : registre officiel (API Recherche d'entreprises), Wikipédia, signal de recrutement ; chaque fait sourcé | construit |
 | agent006_application_builder | CV LaTeX (Tectonic), lettre si demandée, paquet ; DeepSeek propose titre / accroche / résumé, le programme vérifie (faits du profil, 1 page, ATS) | construit |
-| agent007_gap_project_planner | chaque offre favorable à laquelle il manque 1 ou 2 compétences reçoit son propre brief de projet (DeepSeek, vérifié), dans la chaîne quotidienne, 3 au plus par passage ; les compétences les plus demandées sur 30 jours restent affichées | construit |
+| agent007_gap_project_planner | trois types de projets (DeepSeek, vérifiés), 3 par passage dans la chaîne quotidienne : combler (une offre favorable à laquelle il manque 1 ou 2 compétences), renforcer (une compétence « pratique » demandée par au moins 10 offres, passée en « maîtrise »), élargir (une compétence acceptée à la place d'une des tiennes, comme Verilog pour VHDL) ; une place par jour réservée à renforcer ou élargir ; chaque brief liste les offres qu'il améliore et leur gain de score | construit |
 | agent008_portfolio_publisher | démo de ton vrai portfolio avec la carte ; publication datée et retrait après validation (index.html seulement, entre balises) | construit |
 | agent009_inbox_tracker | Gmail en lecture seule (IMAP EXAMINE + BODY.PEEK), rattachement, classement avec confiance, alertes ; aucun corps de mail stocké | construit (attend IMAP_PASSWORD) |
 | agent010_followup_coach | fiche d'entretien, proposition d'agenda (.ics après validation), brouillon de relance (jamais envoyé) | construit |
@@ -124,4 +124,10 @@ la publication envoie la page et, au plus, ton image (contrôle PORTFOLIO_DIFF_S
 Pour chaque projet proposé, job_pilot calcule deux fois le score de l'offre : avec ton profil actuel (le meilleur CV
 possible aujourd'hui) puis avec les compétences du projet au niveau « pratique ». Couverture des compétences de
 l'offre et score, avant et après, sont affichés dans le brief, sur la page de l'offre et dans le dossier de candidature.
+
+## Compétences au choix (SKILL_ALTERNATIVES)
+
+Quand une offre écrit « VHDL ou Verilog », « VHDL et/ou Verilog » ou « VHDL/Verilog » et que tu as l'une des deux,
+l'autre n'est pas comptée manquante (le score l'indique : « vhdl accepté à la place de verilog »). Seuls des outils
+interchangeables comptent (groupes de `skill_alternative_groups` dans words.json : langages HDL, CAO de cartes...).
 

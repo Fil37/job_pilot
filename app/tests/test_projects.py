@@ -392,5 +392,67 @@ def test_a_project_for_an_offer_accepting_either_skill_says_the_choice():
     assert "Compétence(s) visée(s) : **verilog ou vhdl** (l'offre accepte l'une ou l'autre" in Path(path).read_text()
 
 
+def test_reinforce_and_broaden_candidates():
+    """Request of the user 2026-11-23 (BRIEF_KINDS): reinforce = a skill you have at the working level asked by many
+    favourable offers; broaden = a skill many offers accept instead of one you know; existing briefs are not redone."""
+    from app.agent.agent007_gap_project_planner import broaden_candidates, reinforce_candidates
+    cfg = {**GAPS, "reinforce_min_offers": 2, "broaden_min_offers": 2}
+    row = lambda i, **k: {"offer_id": f"o{i}", "score": 80, "eliminated": 0, "decision": "keep", "scored_at": "1",
+                          "missing": [], "matched": [], "text": "", **k}
+    rows = [row(1, matched=[{"skill": "altium", "level": "working"}], text="VHDL et/ou Verilog"),
+            row(2, matched=[{"skill": "altium", "level": "working"}, {"skill": "vhdl", "level": "core"}], text="VHDL ou Verilog"),
+            row(3, matched=[{"skill": "vhdl", "level": "core"}], missing=["verilog"], text="Verilog"),
+            row(4, eliminated=1, matched=[{"skill": "python", "level": "working"}] )]
+    assert reinforce_candidates(rows, cfg, set()) == [("altium", ["o1", "o2"])]
+    assert reinforce_candidates(rows, cfg, {"altium"}) == []
+    lex = {"vhdl": ["vhdl"], "verilog": ["verilog"]}
+    assert broaden_candidates(rows, cfg, {"vhdl", "altium"}, lex, [["vhdl", "verilog"]], set()) == \
+        [("verilog", "vhdl", ["o1", "o2"], ["o3"])]
+
+
+def test_one_slot_goes_to_a_reinforcement_and_it_lists_the_offers_it_improves():
+    """BRIEF_KINDS: with 3 slots, a reinforcement project takes one and the gap projects the others; the
+    reinforcement brief lists the offers it improves (the skill raised from working to core)."""
+    tmp = Path(tempfile.mkdtemp())
+    inst = make_instance(tmp)
+    inst["overrides"]["gaps"] = {"reinforce_min_offers": 2, "max_briefs_per_run": 3}
+    orch = make_orch(tmp, instance=inst)
+    with sqlite3.connect(orch.db_path) as c:
+        for i in range(4):
+            seed_offer(c, orch.schemas["rows"], f"o{i}", 80 - i, ["kafka"])
+        c.execute("UPDATE scores SET matched=?", (json.dumps([{"skill": "postgresql", "level": "working"}]),))
+        c.execute("UPDATE offers SET description='Pipelines avec PostgreSQL et Kafka.'")
+    orch.run(None, only=["agent001"])
+    from app.agent import agent000_job_pilot as a0
+    original = a0.Orchestrator._ctx
+    kinds = []
+
+    def ctx_with_model(self, *a, **k):
+        ctx = original(self, *a, **k)
+
+        def transport(url, headers, body, timeout):
+            payload = json.loads(body["messages"][1]["content"])
+            kinds.append(payload["project_kind"])
+            sk = payload["target_skills"][0]
+            ans = dict(BRIEF, title=f"Projet {sk}", objective=f"Un projet {sk}.", portfolio_summary="Un banc.",
+                       software=[sk], builds_on=["python", "sql"])
+            return 200, {"choices": [{"message": {"content": json.dumps(ans)}}], "usage": {"prompt_tokens": 9, "completion_tokens": 9}}
+        ctx.llm_transport = transport
+        return ctx
+    a0.Orchestrator._ctx = ctx_with_model
+    try:
+        with env_vars(DEEPSEEK_API_KEY="test-key-long"):
+            r = orch.run(None, only=["agent007"])
+    finally:
+        a0.Orchestrator._ctx = original
+    assert kinds == ["reinforce", "gap", "gap"], (kinds, r["results"]["agent007"])
+    c = sqlite3.connect(orch.db_path)
+    b, path = c.execute("SELECT brief, path FROM project_briefs WHERE json_extract(brief, '$.kind')='reinforce'").fetchone()
+    b = json.loads(b)
+    assert b["coverage"]["offers"] == 4 and b["coverage"]["avg_score_gain"] > 0
+    text = Path(path).read_text()
+    assert "Type : **renforcement**" in text and "améliore **4 offre(s) favorable(s)**" in text
+
+
 if __name__ == "__main__":
     run_main(globals())

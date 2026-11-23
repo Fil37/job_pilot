@@ -173,7 +173,8 @@ def register(app, orch: Orchestrator) -> None:
                 "USING(offer_id) ORDER BY a.created_at DESC LIMIT 50")]
             briefs = [dict(r) for r in c.execute(
                 "SELECT b.brief_id, b.skill, b.title, b.status, b.created_at, json_extract(b.brief, '$.done_on') AS done_on, "
-                "json_extract(b.brief, '$.alternatives') AS alts, "
+                "json_extract(b.brief, '$.alternatives') AS alts, json_extract(b.brief, '$.kind') AS kind, "
+                "json_extract(b.brief, '$.coverage.offers') AS covers, "
                 "p.entry_id, p.status AS entry_status, "
                 "p.publish_at, p.expire_at, p.error FROM project_briefs b LEFT JOIN portfolio_entries p USING(brief_id) "
                 "ORDER BY b.created_at DESC LIMIT 10")]

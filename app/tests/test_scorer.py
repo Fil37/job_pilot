@@ -95,5 +95,17 @@ def test_a_place_counts_as_france_only_when_recognised():
     assert loc(location="Grenoble", source_id="lever")["components"]["values"]["location"] == 1.0
 
 
+def test_a_skill_accepted_instead_of_yours_is_not_missing():
+    """Real case 2026-11-23 (check SKILL_ALTERNATIVES): « VHDL et/ou Verilog » with VHDL in your profile: Verilog is
+    not missing and the note says why; « VHDL, Verilog » (both asked) keeps Verilog missing."""
+    words = dict(W, skill_lexicon={**W["skill_lexicon"], "vhdl": ["vhdl"], "verilog": ["verilog"]},
+                 skill_alternative_groups={"groups": [["vhdl", "verilog"]]})
+    prof = dict(PROFILE, skills={**PROFILE["skills"], "vhdl": "core"})
+    s = score_offer(offer(description="Conception en VHDL et/ou Verilog."), "keep", TERMS, prof, CRIT, words, SCORING)
+    assert "verilog" not in s["missing"] and "vhdl accepté à la place de verilog" in s["components"]["notes"]["skills"]
+    s = score_offer(offer(description="Conception en VHDL, Verilog."), "keep", TERMS, prof, CRIT, words, SCORING)
+    assert "verilog" in s["missing"]
+
+
 if __name__ == "__main__":
     run_main(globals())

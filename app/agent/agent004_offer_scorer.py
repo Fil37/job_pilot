@@ -109,11 +109,20 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
     for k in profile.get("skills_written", []):            # SKILL_FROM_PROFILE_TEXT (agent001)
         skills_p.setdefault(k, "working")
     req = offer_skills(text, words["skill_lexicon"], skills_p, aliases)
+    # SKILL_ALTERNATIVES (real case 2026-11-23: 14 offers say « VHDL et/ou Verilog » and Verilog was counted missing
+    # although your VHDL is accepted): a skill the offer accepts INSTEAD of one you have is not a requirement.
+    groups = (words.get("skill_alternative_groups") or {}).get("groups", [])
+    alts = skill_alternatives(text, req, words["skill_lexicon"], groups) if groups else {}
+    instead = {s: next(a for a in alts[s] if a in skills_p) for s in req
+               if s not in skills_p and any(a in skills_p for a in alts.get(s, []))}
+    req = req - set(instead)
     matched = sorted(s for s in req if s in skills_p)
     missing = sorted(s for s in req if s not in skills_p)
     comp, notes, elim = {}, {}, []
     comp["skills"] = round(sum(LEVEL_WEIGHT[skills_p[s]] for s in matched) / len(req), 4) if req else 0.5
     notes["skills"] = f"{len(matched)} compétence(s) sur {len(req)}" if req else "aucune compétence détectée (neutre)"
+    if instead:
+        notes["skills"] += " ; " + ", ".join(f"{a} accepté à la place de {s}" for s, a in sorted(instead.items()))
     comp["level"] = {"keep": 1.0, "review": 0.5, "reject": 0.0}[decision]
     notes["level"] = {"keep": "expérience compatible", "review": "expérience à vérifier", "reject": "expérience rejetée"}[decision]
     if decision == "reject":
@@ -175,7 +184,7 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
 
 
 def project_gain(conn, offer_id: str, extra_skills: list[str], *, criteria: dict, words: dict, scoring: dict,
-                 level: str = "working") -> dict | None:
+                 level: str = "working", upgrade: bool = False) -> dict | None:
     """PROJECT_GAIN (request of the user 2026-11-23: "le gain de % entre la version de CV optimale sans le projet et avec
     lui"): the same computation as the score, twice. 'Now' = your current profile, i.e. the best CV possible today (the
     CV check adds any profile skill the CV forgot); 'with' = your profile plus the project's skills at the 'working'
@@ -194,8 +203,10 @@ def project_gain(conn, offer_id: str, extra_skills: list[str], *, criteria: dict
     profile = json.loads(prof["summary"])
     now = score_offer(dict(o), decision, terms, profile, criteria, words, scoring)
     with_p = copy.deepcopy(profile)
-    with_p["skills"] = {**with_p.get("skills", {}), **{fold(x): level for x in extra_skills
-                                                      if fold(x) not in with_p.get("skills", {})}}
+    cur = with_p.get("skills", {})
+    # a new skill at `level`; with upgrade=True (a reinforcement project) a skill you have is raised to `level`
+    with_p["skills"] = {**cur, **{fold(x): level for x in extra_skills
+                                  if fold(x) not in cur or (upgrade and LEVEL_WEIGHT[level] > LEVEL_WEIGHT[cur[fold(x)]])}}
     later = score_offer(dict(o), decision, terms, with_p, criteria, words, scoring)
 
     def cov(sc):
@@ -205,6 +216,34 @@ def project_gain(conn, offer_id: str, extra_skills: list[str], *, criteria: dict
             "coverage_gain": cov(later) - cov(now), "score_now": now["score"], "score_with": later["score"],
             "score_gain": round(later["score"] - now["score"], 1), "still_missing": later["missing"],
             "eliminated": bool(later["eliminated"])}
+
+
+def offers_gain(conn, offer_ids: list[str], skills: list[str], *, criteria: dict, words: dict, scoring: dict,
+                level: str = "working", upgrade: bool = False) -> dict:
+    """PROJECT_GAIN over several offers: how many offers the project improves and by how much (score points)."""
+    per = []
+    for oid in offer_ids:
+        g = project_gain(conn, oid, skills, criteria=criteria, words=words, scoring=scoring, level=level, upgrade=upgrade)
+        if g and g["score_gain"] > 0:
+            t = conn.execute("SELECT title, company FROM offers WHERE offer_id=?", (oid,)).fetchone()
+            per.append({"offer_id": oid, "title": t[0], "company": t[1], "score_now": g["score_now"],
+                        "score_with": g["score_with"], "score_gain": g["score_gain"], "coverage_gain": g["coverage_gain"]})
+    per.sort(key=lambda x: (-x["score_gain"], -x["score_with"]))
+    return {"offers": len(per), "avg_score_gain": round(sum(x["score_gain"] for x in per) / len(per), 1) if per else 0.0,
+            "max_score_gain": max((x["score_gain"] for x in per), default=0.0), "top": per[:10]}
+
+
+def coverage_lines(cov: dict) -> list[str]:
+    """French lines: the offers a project improves."""
+    if not cov.get("offers"):
+        return ["- Aucune autre offre favorable n'en profiterait pour l'instant."]
+    out = [f"- Ce projet améliore **{cov['offers']} offre(s) favorable(s)** : +{cov['avg_score_gain']:.1f} points de score "
+           f"en moyenne, jusqu'à +{cov['max_score_gain']:.0f}"]
+    out += [f"- {x['title'][:70]}" + (f" · {x['company']}" if x.get("company") else "") +
+            f" : {x['score_now']:.0f} → {x['score_with']:.0f}" for x in cov["top"]]
+    if cov["offers"] > len(cov["top"]):
+        out.append(f"- … et {cov['offers'] - len(cov['top'])} autre(s)")
+    return out
 
 
 def gain_lines(g: dict) -> list[str]:
