@@ -140,6 +140,50 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
             "eliminated": bool(elim), "elimination_reasons": elim}
 
 
+def project_gain(conn, offer_id: str, extra_skills: list[str], *, criteria: dict, words: dict, scoring: dict,
+                 level: str = "working") -> dict | None:
+    """PROJECT_GAIN (request of the user 2026-11-23: "le gain de % entre la version de CV optimale sans le projet et avec
+    lui"): the same computation as the score, twice. 'Now' = your current profile, i.e. the best CV possible today (the
+    CV check adds any profile skill the CV forgot); 'with' = your profile plus the project's skills at the 'working'
+    level, as once the project is done and added to your profile. Estimation, computed by the program."""
+    import copy
+    prof = conn.execute("SELECT * FROM profile_versions ORDER BY created_at DESC LIMIT 1").fetchone()
+    o = conn.execute("SELECT * FROM offers WHERE offer_id=?", (offer_id,)).fetchone()
+    if not prof or not o:
+        return None
+    d = conn.execute("SELECT COALESCE(user_override, decision) FROM experience_decisions WHERE offer_id=? "
+                     "ORDER BY profile_hash=? DESC, decided_at DESC LIMIT 1", (offer_id, prof["profile_hash"])).fetchone()
+    decision = d[0] if d else "review"
+    terms = {k: [] for k in words["term_kinds"]}
+    for r in conn.execute("SELECT kind, value FROM search_terms WHERE profile_hash=?", (prof["profile_hash"],)):
+        terms[r[0]].append(r[1])
+    profile = json.loads(prof["summary"])
+    now = score_offer(dict(o), decision, terms, profile, criteria, words, scoring)
+    with_p = copy.deepcopy(profile)
+    with_p["skills"] = {**with_p.get("skills", {}), **{fold(x): level for x in extra_skills
+                                                      if fold(x) not in with_p.get("skills", {})}}
+    later = score_offer(dict(o), decision, terms, with_p, criteria, words, scoring)
+
+    def cov(sc):
+        n = len(sc["matched"]) + len(sc["missing"])
+        return round(100 * len(sc["matched"]) / n) if n else 100
+    return {"skills": list(extra_skills), "coverage_now": cov(now), "coverage_with": cov(later),
+            "coverage_gain": cov(later) - cov(now), "score_now": now["score"], "score_with": later["score"],
+            "score_gain": round(later["score"] - now["score"], 1), "still_missing": later["missing"],
+            "eliminated": bool(later["eliminated"])}
+
+
+def gain_lines(g: dict) -> list[str]:
+    """French lines of the gain, for the brief, the offer page and the application package."""
+    return [f"- Couverture des compétences de l'offre par ton CV optimal : **{g['coverage_now']} %** sans le projet, "
+            f"**{g['coverage_with']} %** avec lui (**{g['coverage_gain']:+d} points**)",
+            f"- Score de l'offre : {g['score_now']:.0f} sans le projet, {g['score_with']:.0f} avec lui "
+            f"({g['score_gain']:+.0f} points)",
+            "- Compétences encore manquantes après le projet : " + (", ".join(g["still_missing"]) or "aucune"),
+            "- Estimation calculée par le programme : les compétences du projet comptées au niveau « pratique », "
+            "une fois le projet réalisé et ajouté à ton profil."]
+
+
 class Agent(BaseAgent):
     AGENT_ID = AGENT_ID
     SKILLS = SKILLS

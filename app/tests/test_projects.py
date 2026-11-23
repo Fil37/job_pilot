@@ -15,7 +15,8 @@ from conftest import SCHEMAS, env_vars, make_instance, make_orch, run_main  # no
 from app.agent.agent005_company_researcher import best_registry_match, company_key  # noqa: E402
 from app.agent import upsert  # noqa: E402
 from app.agent.agent007_gap_project_planner import offers_to_brief, window_gaps  # noqa: E402
-from app.agent.agent008_portfolio_publisher import Git, card_html, card_year, insert_card, parse_done_on, remove_card  # noqa: E402
+from app.agent.agent008_portfolio_publisher import (Git, card_html, card_year, grid_titles, image_problem,  # noqa: E402
+                                                    insert_card, parse_done_on, remove_card)
 from app.agent.agent011_pipeline_analyst import propose_weights  # noqa: E402
 
 GAPS = {"window_days": 30, "min_score": 55, "max_missing": 2, "max_briefs_per_run": 3}
@@ -24,7 +25,12 @@ BRIEF = {"title": "Bus CAN sur STM32 avec <script>", "objective": "Apprendre Kaf
          "architecture": "Producteur Python → Kafka → consommateur", "hardware": ["PC"], "software": ["Kafka"],
          "steps": [{"days": f"J{i}", "milestone": f"étape {i}", "deliverable": "d"} for i in range(1, 6)],
          "success_criteria": ["1000 messages/s"], "pitfalls": ["partitions"], "interview_pitch": "Projet d'apprentissage.",
-         "done_on": "2025-06"}
+         "done_on": "2025-06",
+         "card": {"short_name": "Bus CAN", "domain": "Firmware <b>", "context": "Seul", "title": "Bus CAN sur STM32 avec <script>",
+                  "summary": "Une chaîne Kafka & co. entre un PC et une carte.", "details_title": "Architecture",
+                  "details": "Producteur → consommateur", "tags": ["STM32", "CAN"], "link_url": "https://github.com/x/y",
+                  "link_label": "Code sur GitHub", "image_alt": "", "categories": ["firmware", "capteurs"], "position": "first",
+                  "figures": [{"value": "1 000", "label": "messages par seconde"}], "image_file": None}}
 
 
 def test_trigger_rules_are_computed_by_the_program():
@@ -108,16 +114,38 @@ def test_agent007_writes_one_brief_per_offer_linked_to_it():
     assert c.execute("SELECT COUNT(*) FROM alerts WHERE category='project'").fetchone()[0] == 2
 
 
-def test_card_is_escaped_and_insert_remove_touch_only_the_block():
-    """Case: model text is HTML-escaped in the card; inserting twice replaces; removing gives back the page."""
-    page = '<main><div class="proj-grid">\n  <article>old</article>\n</div></main>\n'
-    card = card_html(BRIEF, "kafka", 2026, "bus-can")
+def test_card_is_like_yours_escaped_and_placed_where_you_chose():
+    """Remark of the user 2026-11-23 (check CARD_LIKE_YOURS): the card follows the markup of his 'Autres projets'
+    cards (side: short name, domain, context and REAL year, green 'Projet personnel'; his categories; figures; link),
+    is made from his sheet only, escapes every text, and goes first, after a chosen card or last; removing gives the
+    page back."""
+    card = card_html(BRIEF["card"], "bus-can", 2025)
+    assert '<article class="proj compact" data-cat="firmware capteurs" data-type="perso">' in card
+    assert '<div class="side"><strong>Bus CAN</strong>Firmware &lt;b&gt;<br>Seul, 2025<span class="kind perso">Projet personnel</span></div>' in card
     assert "<script>" not in card and "&lt;script&gt;" in card and "Kafka &amp; co." in card
-    assert "Apprendre" not in card            # BRIEF_PUBLIC_SUMMARY: the public card uses portfolio_summary
-    once = insert_card(page, "bus-can", card, '<div class="proj-grid">')
-    assert insert_card(once, "bus-can", card, '<div class="proj-grid">') == once
-    assert once.index("job_pilot:begin bus-can") < once.index("<article>old")
-    assert remove_card(once, "bus-can").replace("\n\n", "\n") == page.replace("\n\n", "\n")
+    assert '<div><b>1 000</b><span>messages par seconde</span></div>' in card and 'href="https://github.com/x/y"' in card
+    assert "Apprendre" not in card and "J1" not in card          # nothing of the plan: what you built
+    page = ('<main><div class="proj-grid">\n  <article class="proj"><div><h3>Old one</h3></div></article>\n'
+            '  <article class="proj"><div><h3>Second</h3></div></article>\n</div></main>\n')
+    grid = '<div class="proj-grid">'
+    assert grid_titles(page, grid) == ["Old one", "Second"]
+    for pos, before, after in (("first", "job_pilot:begin", "Old one"), ("after:Old one", "Old one", "job_pilot:begin"),
+                               ("last", "Second", "job_pilot:begin")):
+        once = insert_card(page, "bus-can", card, grid, pos)
+        assert insert_card(once, "bus-can", card, grid, pos) == once
+        assert once.index(before) < once.index(after) and once.index("job_pilot:end") < once.index("</main>")
+        assert remove_card(once, "bus-can") == page, pos
+    assert "after" not in insert_card(page, "s", card, grid, "after:unknown")[:30]
+
+
+def test_images_for_your_public_site_are_checked():
+    """Check IMAGE_SAFE: known type with real content, size limit, no script / handler / external link in an SVG."""
+    assert image_problem("a.png", b"\x89PNG....", 1000) is None
+    assert image_problem("a.png", b"GIF89a", 1000) and image_problem("a.gif", b"GIF89a", 1000)
+    assert image_problem("a.png", b"\x89PNG" + b"0" * 2000, 1000)
+    assert image_problem("a.svg", b'<svg><rect width="2"/></svg>', 1000) is None
+    for bad in (b"<svg><script>alert(1)</script></svg>", b'<svg onload="x()"></svg>', b'<svg><a href="https://x.y">x</a></svg>'):
+        assert image_problem("a.svg", bad, 1000), bad
 
 
 def make_remote(tmp: Path) -> Path:
@@ -137,10 +165,13 @@ def portfolio_orch(tmp: Path):
     inst = make_instance(tmp)
     inst["overrides"]["portfolio"] = {"repo": str(bare)}
     orch = make_orch(tmp, instance=inst)
+    img = tmp / "b_1.png"
+    img.write_bytes(b"\x89PNG fake image")
+    brief = {**BRIEF, "card": {**BRIEF["card"], "image_file": str(img), "image_alt": "Banc CAN"}}
     with sqlite3.connect(orch.db_path) as c:
         c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) "
                   "VALUES ('b_1','kafka',?,?,'x','proposed','r0','now')",
-                  (BRIEF["title"], json.dumps(BRIEF)))
+                  (BRIEF["title"], json.dumps(brief)))
     return orch, bare
 
 
@@ -172,15 +203,19 @@ def test_portfolio_demo_then_approved_publication_then_removal():
     orch.decide(aid, True)
     orch.run("portfolio")
     after = remote_index(bare)
-    assert "<br>2025" in after                  # REAL_PROJECT_DATE: your date, not today's
+    assert "Seul, 2025" in after                # REAL_PROJECT_DATE: your date, not today's
     assert "job_pilot:begin" in after and after.count("<article>old</article>") == 1
     st, sha_ = c.execute("SELECT status, commit_sha FROM portfolio_entries").fetchone()
     assert st == "published" and len(sha_) == 40
     names = subprocess.run(["git", "--git-dir", str(bare), "show", "--name-only", "--format=", "main"], capture_output=True,
                            text=True).stdout.split()
-    assert names == ["index.html"]
+    assets = [n for n in names if n.startswith("portfolio-assets/")]
+    assert sorted(names) == ["index.html", *assets] and len(assets) == 1 and assets[0].endswith(".png")
+    assert f'src="{assets[0]}" alt="Banc CAN"' in after     # your image, added with the card (PORTFOLIO_DIFF_SCOPE)
     orch.run("portfolio")                       # end date reached → removed
     assert "job_pilot:begin" not in remote_index(bare)
+    gone = subprocess.run(["git", "--git-dir", str(bare), "show", f"main:{assets[0]}"], capture_output=True)
+    assert gone.returncode != 0                 # the image leaves with the card
     assert c.execute("SELECT status FROM portfolio_entries").fetchone()[0] == "expired"
 
 
@@ -275,9 +310,9 @@ def test_the_card_shows_your_real_date_never_today():
     """Rule of the user 2026-11-23 (check REAL_PROJECT_DATE): a project already done but not versioned yet must not show
     today's date: the card shows the year YOU gave, no year at all without it; a future date is refused."""
     from datetime import datetime as _dt
-    assert card_year(BRIEF) == 2025 and "<br>2025" in card_html(BRIEF, "kafka", card_year(BRIEF), "s")
+    assert card_year(BRIEF) == 2025 and "Seul, 2025" in card_html(BRIEF["card"], "s", card_year(BRIEF))
     no_date = {k: v for k, v in BRIEF.items() if k != "done_on"}
-    assert card_year(no_date) is None and str(_dt.now().year) not in card_html(no_date, "kafka", None, "s")
+    assert card_year(no_date) is None and str(_dt.now().year) not in card_html(no_date["card"], "s", None)
     for bad in ("2999-01", "2025-13", "juin 2025", ""):
         try:
             parse_done_on(bad)
@@ -285,6 +320,25 @@ def test_the_card_shows_your_real_date_never_today():
         except ValueError:
             pass
     assert parse_done_on("2024") == "2024" and parse_done_on("2024-02-29") == "2024-02-29"
+
+
+def test_project_gain_between_optimal_cv_without_and_with_the_project():
+    """Request of the user 2026-11-23 (PROJECT_GAIN): for the offer of a proposed project, the coverage and the score of
+    the best CV possible today vs the same profile plus the project's skills at the working level."""
+    from conftest import FakeWeb, env_vars, ft_offer
+    from app.agent.agent004_offer_scorer import gain_lines, project_gain
+    desc = "Pipelines Python, SQL et Airflow, avec Kafka et Rust. Débutant accepté."
+    with env_vars(FT_CLIENT_ID="id", FT_CLIENT_SECRET="secret-long-enough"):
+        orch = make_orch(transport=FakeWeb(ft=[ft_offer(1, desc=desc)]))
+        orch.run("daily")
+    c = sqlite3.connect(orch.db_path)
+    c.row_factory = sqlite3.Row
+    oid = c.execute("SELECT offer_id FROM offers").fetchone()[0]
+    g = project_gain(c, oid, ["kafka"], criteria=orch.instance["criteria"], words=orch.schemas["words"],
+                     scoring=orch.config["scoring"])
+    assert g["coverage_now"] == 60 and g["coverage_with"] == 80 and g["coverage_gain"] == 20, g
+    assert g["score_with"] > g["score_now"] and g["still_missing"] == ["rust"]
+    assert "**60 %** sans le projet, **80 %** avec lui (**+20 points**)" in gain_lines(g)[0]
 
 
 if __name__ == "__main__":

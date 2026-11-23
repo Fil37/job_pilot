@@ -33,6 +33,7 @@ from pathlib import Path
 
 from app.agent import ROOT, BaseAgent, RunContext, envelope, fold, make_llm, sha, upsert, utc_now
 from app.agent.agent001_profile_builder import load_profile
+from app.agent.agent004_offer_scorer import gain_lines, project_gain
 from app.agent.agent006_application_builder import ask_with_corrections
 
 SKILLS = [
@@ -48,6 +49,12 @@ SKILLS = [
                 "comment le présenter en entretien ; nomme chaque compétence manquante de l'offre et s'appuie sur tes "
                 "compétences (contrôle BRIEF_STRUCTURE). Signalé par une alerte ; le brief s'ouvre depuis l'accueil "
                 "et la page de l'offre."},
+    {"skill_id": "SK_PROJECT_GAIN", "version": "1", "status": "proposed",
+     "objective": "Chiffrer, pour l'offre visée, le gain entre ton CV optimal sans le projet et avec lui.",
+     "summary": "Même calcul que le score, deux fois : ton profil actuel (le meilleur CV possible aujourd'hui), puis ton "
+                "profil avec les compétences du projet au niveau « pratique ». Couverture des compétences de l'offre et "
+                "score, avant et après, en points (PROJECT_GAIN). Dans le brief, sur la page de l'offre (recalculé à "
+                "chaque affichage) et dans le dossier de candidature."},
 ]
 
 AGENT_ID = "agent007"
@@ -82,6 +89,7 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
         md += [f"Offre visée : **{where}**" + (f" ({offer['location']})" if offer.get("location") else ""), ""]
     score = f" (score de l'offre : {offer['score']:.0f}/100)" if offer and offer.get("score") is not None else ""
     md += [f"Compétence(s) à acquérir : **{', '.join(skills)}**{score}", "",
+           *(["## Gain attendu pour cette offre", "", *gain_lines(ans["gain"]), ""] if ans.get("gain") else []),
            "## Objectif", "", ans["objective"], "", f"S'appuie sur : {', '.join(ans['builds_on'])}", "",
            "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [f"- {h}" for h in ans["hardware"]] + [
            "", "## Logiciels", ""] + [f"- {x}" for x in ans["software"]] + ["", "## Étapes et jalons", ""] + [
@@ -223,6 +231,11 @@ class Agent(BaseAgent):
                 warnings.append(f"brief for {o['title'][:60]} not written: {'; '.join(probs)[:120]}")
                 continue
             brief_id = "b_" + sha(f"offer:{o['offer_id']}", 12)
+            with ctx.connect() as c:
+                gain = project_gain(c, o["offer_id"], skills, criteria=ctx.instance["criteria"], words=ctx.words,
+                                    scoring=ctx.config["scoring"])
+            if gain:
+                ans = {**ans, "gain": gain}
             path = self._write(ctx, o, skills, ans, cfg["window_days"])
             with ctx.connect() as c:
                 upsert(c, ctx.rows, "project_briefs", {"brief_id": brief_id, "skill": ", ".join(skills), "title": ans["title"],

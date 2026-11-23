@@ -110,3 +110,18 @@ compétences absentes de ton profil (jamais ajoutées, seulement signalées) et 
 Sur la page d'un projet, « Modifier le projet » ouvre un formulaire avec tous ses champs. Le fichier du brief est réécrit,
 la modification est tracée (`user_brief_edit`) ; seul le résumé public garde sa règle, puisqu'il va sur ton portfolio.
 
+## Projet réalisé : ta carte de portfolio
+
+La carte n'est plus fabriquée à partir de l'idée de projet. Sur la page d'un projet (ou depuis l'accueil),
+« Projet réalisé » ouvre une fiche : date réelle, nom court, domaine, contexte, titre, ce que tu as construit,
+jusqu'à 3 chiffres réels, volet dépliable, mots-clés, lien https, catégories de ton portfolio, place dans la grille
+(en tête, après une carte précise ou à la fin) et image facultative (png, jpg, webp ou svg, 2 Mo au plus, sans script).
+La carte suit exactement le balisage de tes cartes « Autres projets » ; la démo la montre avant toute publication et
+la publication envoie la page et, au plus, ton image (contrôle PORTFOLIO_DIFF_SCOPE).
+
+## Gain d'un projet pour son offre (PROJECT_GAIN)
+
+Pour chaque projet proposé, job_pilot calcule deux fois le score de l'offre : avec ton profil actuel (le meilleur CV
+possible aujourd'hui) puis avec les compétences du projet au niveau « pratique ». Couverture des compétences de
+l'offre et score, avant et après, sont affichés dans le brief, sur la page de l'offre et dans le dossier de candidature.
+

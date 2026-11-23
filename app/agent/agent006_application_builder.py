@@ -43,7 +43,7 @@ from app.agent import (ROOT, BaseAgent, RunContext, contains_term, decode_row, e
                        utc_now)
 from app.agent import supervision as sv
 from app.agent.agent001_profile_builder import load_profile, numbers
-from app.agent.agent004_offer_scorer import offer_skills
+from app.agent.agent004_offer_scorer import gain_lines, offer_skills, project_gain
 
 SKILLS = [
     {"skill_id": "SK_CV_TAILOR", "version": "1", "status": "proposed",
@@ -589,6 +589,15 @@ class Agent(BaseAgent):
                 outcomes.append({"check": "LETTER_FACTS_FROM_PROFILE", "item": oid, "outcome": "kept_despite",
                                  "detail": letter_note})
 
+        # ---- PROJECT_GAIN: for each project proposed for this offer, the gain between your optimal CV without and with it
+        gain_section = []
+        with ctx.connect() as c:
+            for bid, btitle, bskill in c.execute("SELECT brief_id, title, skill FROM project_briefs WHERE offer_id=? "
+                                                 "AND status!='dismissed'", (oid,)).fetchall():
+                g = project_gain(c, oid, [x.strip() for x in bskill.split(",")], criteria=ctx.instance["criteria"],
+                                 words=ctx.words, scoring=ctx.config["scoring"])
+                if g:
+                    gain_section += ["", f"### Avec le projet proposé « {btitle} »", ""] + gain_lines(g)
         # ---- package and tracking row
         vigilance = []
         if score:
@@ -616,7 +625,7 @@ class Agent(BaseAgent):
               f"- Score : {score['score']:.0f} sur 100" if score else "- Score : non calculé",
               f"- CV : {pages} page, texte lisible par les logiciels de tri", f"- Lettre de motivation : {letter_note}",
               "", "## Fiche entreprise", ""] + company_lines(ctx, offer["company"]) + ["",
-              "## Correspondance du CV avec l'offre (contrôle qualité)", ""] + match_lines(match) + ["",
+              "## Correspondance du CV avec l'offre (contrôle qualité)", ""] + match_lines(match) + gain_section + ["",
               "## Points de vigilance", ""] + [f"- {v}" for v in vigilance or ["Aucun."]] + [
               "", "## Ce que le modèle a adapté (à relire)", ""] + (
               [f"- {LABELS_FR[k]} : {header[k]}" for k in changed] or ["- Rien : tes formulations d'origine."]) + [

@@ -294,7 +294,16 @@
    "grid_marker": "<div class=\"proj-grid\">",
    "token_env": "GITHUB_TOKEN",
    "author_name": "job_pilot",
-   "note": "Push only after an approved publish_portfolio_entry, at its publish_at; removal at expire_at."
+   "note": "Push only after an approved publish_portfolio_entry, at its publish_at; removal at expire_at.",
+   "assets_dir": "portfolio-assets",
+   "categories": {
+    "edge": "Vision & IA",
+    "fpga": "FPGA / SoC",
+    "firmware": "Embarqué & temps réel",
+    "capteurs": "Capteurs & MEMS",
+    "genai": "IA générative"
+   },
+   "image_max_bytes": 2000000
   },
   "analyst": {
    "min_outcomes": 10,

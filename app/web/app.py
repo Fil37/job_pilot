@@ -33,7 +33,7 @@ def create_app(orch: Orchestrator | None = None, *, start: bool = True) -> Flask
     app = Flask(__name__, template_folder=str(APP_DIR / "web" / "templates"), static_folder=str(APP_DIR / "static"),
                 static_url_path="/static")
     app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
-    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", MAX_CONTENT_LENGTH=256 * 1024)
+    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", MAX_CONTENT_LENGTH=3 * 1024 * 1024)   # a project image (2 Mo at most, checked)
     app.extensions["job_pilot"] = orch
     page.register(app, orch)
     return app

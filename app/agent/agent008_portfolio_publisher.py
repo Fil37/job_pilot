@@ -39,16 +39,16 @@ from app.agent import BaseAgent, RunContext, db_connect, decode_row, envelope, f
 from app.agent import supervision as sv
 
 SKILLS = [
-    {"skill_id": "SK_PORTFOLIO_RENDER", "version": "1", "status": "proposed",
-     "objective": "Produire une démo séparée de l'entrée de portfolio, sans rien publier.",
-     "summary": "Clone ton portfolio public (lecture seule), insère la carte du projet en tête de la grille entre les "
-                "marqueurs job_pilot et sert le résultat en local (« Ouvrir la démo », accueil). Rien n'est envoyé."},
-    {"skill_id": "SK_PORTFOLIO_PUBLISH", "version": "1", "status": "proposed",
-     "objective": "Publier une entrée approuvée à la date choisie, pour une durée limitée si demandé.",
-     "summary": "Seulement après une validation publish_portfolio_entry (dépôt, fichier et dates exacts) ; à "
-                "publish_at la carte est envoyée, à expire_at elle est retirée. Contrôle PORTFOLIO_DIFF_SCOPE : "
-                "index.html seulement, ajouts seulement (retrait : suppressions seulement). Jeton lu dans .env par "
-                "GIT_ASKPASS, jamais journalisé."},
+    {"skill_id": "SK_PORTFOLIO_RENDER", "version": "2", "status": "proposed",
+     "objective": "Produire une démo de ta carte de portfolio, faite à partir de ta fiche « Projet réalisé », sans rien publier.",
+     "summary": "Clone ton portfolio public (lecture seule) et insère la carte au format exact de tes autres cartes (nom "
+                "court, domaine, contexte et année réelle, chiffres, volet dépliable, mots-clés, lien, image), dans tes "
+                "catégories et à la place choisie (contrôles CARD_LIKE_YOURS, REAL_PROJECT_DATE, IMAGE_SAFE). Rien n'est envoyé."},
+    {"skill_id": "SK_PORTFOLIO_PUBLISH", "version": "2", "status": "proposed",
+     "objective": "Publier une carte approuvée à la date choisie, pour une durée limitée si demandé.",
+     "summary": "Seulement après une validation publish_portfolio_entry ; à publish_at la carte (et ton image) sont envoyées, "
+                "à expire_at elles sont retirées. Contrôle PORTFOLIO_DIFF_SCOPE : index.html entre les marqueurs job_pilot "
+                "et, au plus, l'image de ta carte. Jeton lu dans .env par GIT_ASKPASS, jamais journalisé."},
 ]
 
 AGENT_ID = "agent008"
@@ -83,30 +83,102 @@ def card_year(brief: dict) -> int | None:
         return None
 
 
-def card_html(brief: dict, skill: str, year: int | None, slug: str) -> str:
-    """The card in the markup of your portfolio (compact article). Every text is HTML-escaped."""
+CARD_FIELDS = ("short_name", "domain", "context", "title", "summary", "details_title", "details", "tags", "link_url",
+               "link_label", "image_alt", "categories", "position", "figures", "image_file")
+IMAGE_TYPES = {".png": b"\x89PNG", ".jpg": b"\xff\xd8", ".jpeg": b"\xff\xd8", ".webp": b"RIFF", ".svg": None}
+
+
+def image_problem(name: str, data: bytes, max_bytes: int) -> str | None:
+    """IMAGE_SAFE: an image you add to your PUBLIC site: known type, real content, size limit, no script in an SVG."""
+    ext = Path(name or "").suffix.lower()
+    if ext not in IMAGE_TYPES:
+        return "type d'image refusé (png, jpg, webp ou svg)"
+    if not data or len(data) > max_bytes:
+        return f"image vide ou trop lourde (au plus {max_bytes // 1000} ko)"
+    magic = IMAGE_TYPES[ext]
+    if magic and not data.startswith(magic):
+        return "le contenu ne correspond pas à l'extension"
+    if ext == ".svg":
+        t = data.decode("utf-8", "replace").lower()
+        if "<svg" not in t or re.search(r"<script|<foreignobject|\son\w+\s*=|javascript:|href\s*=\s*[\"']https?:", t):
+            return "SVG refusé : script, gestionnaire d'événement ou lien externe"
+    return None
+
+
+def card_html(card: dict, slug: str, year: int | None, image_src: str | None = None) -> str:
+    """CARD_LIKE_YOURS (remark of the user 2026-11-23: the generated cards did not look like his): the card in the exact
+    markup of the portfolio's 'Autres projets' grid, from the 'Projet réalisé' sheet YOU filled. Every text is escaped."""
     e = html.escape
-    tags = "".join(f"<li>{e(t)}</li>" for t in [skill] + list(brief.get("builds_on") or [])[:5])
-    steps = " ".join(f"{st.get('days')} : {st.get('milestone')}." for st in brief.get("steps") or [] if isinstance(st, dict))
-    return (f"<!-- job_pilot:begin {slug} -->\n"
-            f'  <article class="proj compact" data-cat="{e(slugify(skill))}" data-type="perso">\n'
-            f'    <div class="side"><strong>{e(skill.upper() if len(skill) <= 6 else skill.capitalize())}</strong>'
-            f'Projet personnel{f"<br>{year}" if year else ""}<span class="kind">Projet personnel</span></div>\n'
-            f"    <div>\n      <h3>{e(brief['title'])}</h3>\n      <p>{e(brief.get('portfolio_summary') or brief['objective'])}</p>\n"
-            f"      <details><summary>Architecture</summary><p>{e(brief['architecture'])}</p></details>\n"
-            f"      <details><summary>Étapes</summary><p>{e(steps)}</p></details>\n"
-            f'      <ul class="tags">{tags}</ul>\n    </div>\n  </article>\n'
-            f"<!-- job_pilot:end {slug} -->\n")
+    ctx_line = ", ".join(x for x in (card.get("context"), str(year) if year else "") if x)
+    side = (f'<div class="side"><strong>{e(card["short_name"])}</strong>{e(card.get("domain") or "")}'
+            f'{"<br>" + e(ctx_line) if ctx_line else ""}<span class="kind perso">Projet personnel</span></div>')
+    parts = [f'  <article class="proj compact" data-cat="{e(" ".join(card.get("categories") or []))}" data-type="perso">',
+             f"    {side}", "    <div>"]
+    if image_src:
+        parts.append(f'      <figure class="proj-visual"><img src="{e(image_src)}" alt="{e(card.get("image_alt") or "")}" '
+                     f'loading="lazy" decoding="async"></figure>')
+    parts += [f"      <h3>{e(card['title'])}</h3>", f"      <p>{e(card['summary'])}</p>"]
+    figs = [f for f in card.get("figures") or [] if f.get("value")]
+    if figs:
+        parts.append('      <div class="figures">')
+        parts += [f'        <div><b>{e(f["value"])}</b><span>{e(f.get("label") or "")}</span></div>' for f in figs[:3]]
+        parts.append("      </div>")
+    if card.get("details"):
+        parts.append(f"      <details><summary>{e(card.get('details_title') or 'Architecture')}</summary>"
+                     f"<p>{e(card['details'])}</p></details>")
+    tags = card.get("tags") or []
+    if tags:
+        parts.append('      <ul class="tags">' + "".join(f"<li>{e(t)}</li>" for t in tags) + "</ul>")
+    if card.get("link_url"):
+        parts.append(f'      <p style="margin-top:14px"><a class="link" href="{e(card["link_url"])}">'
+                     f'{e(card.get("link_label") or "Code sur GitHub")}</a></p>')
+    elif card.get("link_label"):
+        parts.append(f'      <p style="margin-top:14px"><span class="link">{e(card["link_label"])}</span></p>')
+    parts += ["    </div>", "  </article>"]
+    return f"<!-- job_pilot:begin {slug} -->\n" + "\n".join(parts) + f"\n<!-- job_pilot:end {slug} -->\n"
 
 
-def insert_card(page: str, slug: str, card: str, grid_marker: str) -> str:
-    """Idempotent: an existing block of the same slug is replaced; otherwise the card goes first in the grid."""
-    page = remove_card(page, slug)
+def grid_span(page: str, grid_marker: str) -> tuple[int, int, list[tuple[str, int]]]:
+    """(start after the marker, end at the grid's closing </div>, [(card title, end of its </article>)...])."""
     i = page.find(grid_marker)
     if i < 0:
         raise ValueError("project grid not found in the portfolio page")
-    j = i + len(grid_marker)
-    return page[:j] + "\n" + card + page[j:].lstrip("\n")
+    j = pos = i + len(grid_marker)
+    depth, cards, title = 1, [], None
+    for m in re.finditer(r"<div\b|</div>|<h3>(.*?)</h3>|</article>", page[j:], re.S):
+        tok = m.group(0)
+        if tok.startswith("<div"):
+            depth += 1
+        elif tok == "</div>":
+            depth -= 1
+            if depth == 0:
+                return j, j + m.start(), cards
+        elif tok.startswith("<h3>"):
+            title = html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
+        elif tok == "</article>" and depth == 1:
+            cards.append((title or "", j + m.end()))
+            title = None
+        pos = j + m.end()
+    raise ValueError("project grid not closed in the portfolio page")
+
+
+def grid_titles(page: str, grid_marker: str) -> list[str]:
+    """Titles of the cards of the grid, in order (to choose where your card goes)."""
+    return [t for t, _ in grid_span(page, grid_marker)[2]]
+
+
+def insert_card(page: str, slug: str, card: str, grid_marker: str, position: str = "first") -> str:
+    """Idempotent: an existing block of the same slug is removed first. position = 'first' (top of the grid), 'last'
+    or 'after:<title of a card>' (YOUR choice of place; an unknown title falls back to the top)."""
+    page = remove_card(page, slug)
+    start, end, cards = grid_span(page, grid_marker)
+    at = start
+    if position == "last":
+        at = cards[-1][1] if cards else start
+    elif position.startswith("after:"):
+        at = next((p for t, p in cards if t == position[6:]), start)
+    return page[:at] + "\n" + card.rstrip("\n") + "\n" + page[at:].lstrip("\n") if at == start else \
+        page[:at] + "\n" + card.rstrip("\n") + page[at:]
 
 
 def remove_card(page: str, slug: str) -> str:
@@ -176,7 +248,8 @@ class Agent(BaseAgent):
         ctx.store.register_check("REAL_PROJECT_DATE", AGENT_ID, "la carte affiche l'année de réalisation que tu as donnée, "
                                  "jamais celle du jour ; pas de publication sans elle",
                                  "règle de l'utilisateur 2026-11-23 : des projets déjà faits mais pas encore versionnés")
-        ctx.store.register_check("PORTFOLIO_DIFF_SCOPE", AGENT_ID, "index.html seulement, et seulement entre les marqueurs job_pilot",
+        ctx.store.register_check("PORTFOLIO_DIFF_SCOPE", AGENT_ID, "index.html (entre les marqueurs job_pilot) et, au plus, "
+                                 "l'image de ta carte ; rien d'autre",
                                  "rule of the user: what goes outside is approved, nothing else changes")
         cfg = ctx.config["portfolio"]
         done, errors, outcomes = [], [], []
@@ -206,6 +279,14 @@ class Agent(BaseAgent):
         return envelope(ctx, AGENT_ID, status, errors=errors, data={"done": done, "alerts": alerts},
                         metrics={"done": len(done)})
 
+    def _card(self, b: dict, slug: str, cfg: dict):
+        """(card markup, (image source path, path in the portfolio) or None) from YOUR 'Projet réalisé' sheet."""
+        card = b["brief"]["card"]
+        image = None
+        if card.get("image_file") and Path(card["image_file"]).is_file():
+            image = (card["image_file"], f"{cfg.get('assets_dir', 'portfolio-assets')}/{slug}{Path(card['image_file']).suffix.lower()}")
+        return card_html(card, slug, card_year(b["brief"]), image[1] if image else None), image
+
     def _brief(self, ctx, brief_id):
         with ctx.connect() as c:
             row = c.execute("SELECT * FROM project_briefs WHERE brief_id=?", (brief_id,)).fetchone()
@@ -215,16 +296,21 @@ class Agent(BaseAgent):
 
     def _demo(self, ctx, git, cfg, brief_id) -> dict:
         b = self._brief(ctx, brief_id)
-        slug = slugify(b["title"])
+        if not (b["brief"].get("card") or {}).get("title"):
+            raise ValueError("fiche « Projet réalisé » non remplie : remplis-la avant la démo")
+        slug = slugify(b["brief"]["card"]["title"])
         folder = ctx.run_dir / "portfolio_demo"
         if folder.exists():
             shutil.rmtree(folder)
         git.run("clone", "--depth", "1", "--branch", cfg["branch"], cfg["repo"], str(folder))
         shutil.rmtree(folder / ".git", ignore_errors=True)               # a demo is not a repository
         page = folder / cfg["file"]
-        page.write_text(insert_card(page.read_text(encoding="utf-8"), slug,
-                                    card_html(b["brief"], b["skill"], card_year(b["brief"]), slug), cfg["grid_marker"]),
-                        encoding="utf-8")
+        card, image = self._card(b, slug, cfg)
+        if image:
+            (folder / image[1]).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(image[0], folder / image[1])
+        page.write_text(insert_card(page.read_text(encoding="utf-8"), slug, card, cfg["grid_marker"],
+                                    b["brief"]["card"].get("position") or "first"), encoding="utf-8")
         entry_id = "p_" + sha(brief_id, 12)
         with ctx.connect() as c:
             prev = c.execute("SELECT status FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
@@ -245,26 +331,48 @@ class Agent(BaseAgent):
         git.run("clone", "--depth", "1", "--branch", cfg["branch"], cfg["repo"], str(work))
         page = work / cfg["file"]
         text = page.read_text(encoding="utf-8")
+        asset = None
         if kind == "publish":
-            year = card_year(b["brief"])
-            if year is None:                       # REAL_PROJECT_DATE: never published with today's date by default
+            if card_year(b["brief"]) is None:      # REAL_PROJECT_DATE: never published with today's date by default
                 raise ValueError("date de réalisation du projet absente : renseigne-la avant de publier")
-            new = insert_card(text, e["slug"], card_html(b["brief"], b["skill"], year, e["slug"]), cfg["grid_marker"])
-            message = f"Add project {b['title']} (job_pilot, approved)"
+            if not (b["brief"].get("card") or {}).get("title"):
+                raise ValueError("fiche « Projet réalisé » non remplie")
+            card, image = self._card(b, e["slug"], cfg)
+            if image:
+                asset = image[1]
+                dest = work / asset
+                if dest.exists() and dest.read_bytes() != Path(image[0]).read_bytes():
+                    raise ValueError(f"{asset} existe déjà dans ton portfolio avec un autre contenu")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(image[0], dest)
+            new = insert_card(text, e["slug"], card, cfg["grid_marker"], b["brief"]["card"].get("position") or "first")
+            message = f"Add project {b['brief']['card']['title']} (job_pilot, approved)"
         else:
             new = remove_card(text, e["slug"])
-            message = f"Remove project {b['title']} (job_pilot, end date reached)"
+            image_file = (b["brief"].get("card") or {}).get("image_file")
+            if image_file:
+                asset = f"{cfg.get('assets_dir', 'portfolio-assets')}/{e['slug']}{Path(image_file).suffix.lower()}"
+                if (work / asset).exists():
+                    (work / asset).unlink()
+            message = f"Remove project {(b['brief'].get('card') or {}).get('title') or b['title']} (job_pilot, end date reached)"
         if new == text:
             raise ValueError("nothing to change in the portfolio page")
         page.write_text(new, encoding="utf-8")
-        names = git.run("diff", "--name-only", cwd=work).split()
-        added, deleted = (int(x) for x in git.run("diff", "--numstat", cwd=work).split()[:2])
-        scope_ok = names == [cfg["file"]] and (deleted == 0 if kind == "publish" else added == 0)
+        git.run("add", "-A", cwd=work)
+        status = sorted(tuple(line.split("\t", 1)) for line in git.run("diff", "--cached", "--name-status", cwd=work).splitlines()
+                        if line.strip())
+        stat = git.run("diff", "--cached", "--numstat", "--", cfg["file"], cwd=work).split()
+        added, deleted = (int(stat[0]), int(stat[1])) if len(stat) >= 2 else (0, 0)
+        # PORTFOLIO_DIFF_SCOPE: the page (additions only to publish, deletions only to remove) and, at most, YOUR image of
+        # this card (added to publish, deleted to remove); nothing else
+        expected = sorted([("M", cfg["file"])] + ([("A" if kind == "publish" else "D", asset)] if asset else []))
+        scope_ok = (status == expected or (kind == "publish" and asset and status == [("M", cfg["file"])])) and \
+            (deleted == 0 if kind == "publish" else added == 0)
         outcomes.append({"check": "PORTFOLIO_DIFF_SCOPE", "item": entry_id, "outcome": "pass" if scope_ok else "kept_despite",
-                         "detail": f"{names} +{added} -{deleted}"})
+                         "detail": f"{status} +{added} -{deleted}"})
         if not scope_ok:
-            raise ValueError(f"diff outside the allowed scope: {names} +{added} -{deleted}")
-        git.run("-c", f"user.name={cfg['author_name']}", "-c", "user.email=job_pilot@localhost", "commit", "-am", message, cwd=work)
+            raise ValueError(f"diff outside the allowed scope: {status} +{added} -{deleted}")
+        git.run("-c", f"user.name={cfg['author_name']}", "-c", "user.email=job_pilot@localhost", "commit", "-m", message, cwd=work)
         git.run("push", "origin", f"HEAD:{cfg['branch']}", cwd=work)
         commit = git.run("rev-parse", "HEAD", cwd=work).strip()
         with ctx.connect() as c:

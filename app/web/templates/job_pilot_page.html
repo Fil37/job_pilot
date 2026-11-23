@@ -33,10 +33,48 @@
       <h1 class="title-clamp">{{ doc.title }}</h1>
     </div>
     <div class="head-actions">
-      {% if doc.kind == 'brief' and not doc.edit %}<a class="button small" href="{{ url_for('brief_edit', brief_id=doc.ref) }}">✎ {{ _('Edit the project') }}</a>{% endif %}
+      {% if doc.kind == 'brief' and not doc.edit and not doc.done %}<a class="button small" href="{{ url_for('brief_edit', brief_id=doc.ref) }}">✎ {{ _('Edit the project') }}</a>
+      <a class="button good small" href="{{ url_for('brief_done', brief_id=doc.ref) }}">✓ {{ _('Project done') }}</a>{% endif %}
       {% for f in doc.files %}<a class="button small" href="{{ url_for('application_file', application_id=doc.ref, name=f) }}" target="_blank" rel="noopener">{{ _('Open the CV') if f == 'cv.pdf' else _('Open the letter') }}</a>{% endfor %}
     </div>
   </div>
+  {% if doc.done %}
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Project done: your portfolio card') }}</h2></div>
+    <p class="small">{{ _('The card is made only from this sheet, in the format of your other cards. Write what you really built; nothing is published before your approval.') }}</p>
+    {% if doc.error %}<p class="badge failed">{{ _(doc.error) }}</p>{% endif %}
+    <form method="post" action="{{ url_for('brief_done_save', brief_id=doc.ref) }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>{{ _('Project done on (real date: AAAA, AAAA-MM or AAAA-MM-JJ)') }}<input type="text" name="done_on" value="{{ doc.done.done_on }}" placeholder="AAAA-MM" pattern="\d{4}(-\d{2}(-\d{2})?)?" required></label>
+      <label class="mt-12">{{ _('Short name (side of the card)') }}<input type="text" name="short_name" value="{{ doc.done.short_name }}" maxlength="40" required></label>
+      <label class="mt-12">{{ _('Domain (under the short name)') }}<input type="text" name="domain" value="{{ doc.done.domain }}" maxlength="80" placeholder="Conception numérique"></label>
+      <label class="mt-12">{{ _('Context (before the year)') }}<input type="text" name="context" value="{{ doc.done.context }}" maxlength="60" placeholder="Seul"></label>
+      <label class="mt-12">{{ _('Title') }}<input type="text" name="title" value="{{ doc.done.title }}" maxlength="200" required></label>
+      <label class="mt-12">{{ _('What you built') }}<textarea name="summary" rows="5" required>{{ doc.done.summary }}</textarea></label>
+      <fieldset class="mt-12"><legend>{{ _('Key figures (real, measured by you; up to 3)') }}</legend>
+        {% for fg in doc.done.figures[:3] %}<div class="row-2"><input type="text" name="fig_value_{{ loop.index0 }}" value="{{ fg.value }}" maxlength="24" placeholder="91,5 %"><input type="text" name="fig_label_{{ loop.index0 }}" value="{{ fg.label }}" maxlength="100" placeholder="{{ _('what it measures') }}"></div>{% endfor %}
+      </fieldset>
+      <label class="mt-12">{{ _('Detail title') }}<input type="text" name="details_title" value="{{ doc.done.details_title }}" maxlength="60"></label>
+      <label class="mt-12">{{ _('Detail text') }}<textarea name="details" rows="5">{{ doc.done.details }}</textarea></label>
+      <label class="mt-12">{{ _('Keywords (comma-separated)') }}<input type="text" name="tags" value="{{ doc.done.tags }}"></label>
+      <label class="mt-12">{{ _('Link (https://…)') }}<input type="url" name="link_url" value="{{ doc.done.link_url }}" placeholder="https://github.com/…"></label>
+      <label class="mt-12">{{ _('Link text') }}<input type="text" name="link_label" value="{{ doc.done.link_label }}" maxlength="60"></label>
+      <fieldset class="mt-12"><legend>{{ _('Categories (your portfolio filters)') }}</legend>
+        {% for key, label in doc.categories.items() %}<label class="inline small"><input type="checkbox" name="categories" value="{{ key }}"{% if key in doc.done.categories %} checked{% endif %}> {{ label }}</label> {% endfor %}
+      </fieldset>
+      <label class="mt-12">{{ _('Place in the grid') }}<select name="position">
+        <option value="first"{% if doc.done.position == 'first' %} selected{% endif %}>{{ _('First of the other projects') }}</option>
+        {% for t in doc.grid %}<option value="after:{{ t }}"{% if doc.done.position == 'after:' ~ t %} selected{% endif %}>{{ _('After') }} « {{ t }} »</option>{% endfor %}
+        <option value="last"{% if doc.done.position == 'last' %} selected{% endif %}>{{ _('Last') }}</option>
+      </select></label>
+      {% if not doc.grid %}<p class="small faint">{{ _('Make a demo once to choose a place after a given card.') }}</p>{% endif %}
+      <label class="mt-12">{{ _('Image (png, jpg, webp or svg, 2 MB at most; optional)') }}<input type="file" name="image" accept=".png,.jpg,.jpeg,.webp,.svg"></label>
+      {% if doc.done.image_file %}<p class="small">{{ _('An image is already attached.') }} <label class="inline small"><input type="checkbox" name="remove_image" value="1"> {{ _('Remove it') }}</label></p>{% endif %}
+      <label class="mt-12">{{ _('Image description (for people who cannot see it)') }}<input type="text" name="image_alt" value="{{ doc.done.image_alt }}" maxlength="300"></label>
+      <p class="mt-12"><button type="submit" class="good small">✓ {{ _('Save') }}</button> <a class="button ghost small" href="{{ url_for('document', kind='brief', ref=doc.ref) }}">{{ _('Cancel') }}</a></p>
+    </form>
+  </section>
+  {% endif %}
   {% if doc.edit %}
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Edit the project') }}</h2></div>
@@ -148,6 +186,11 @@
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Project idea') }}</h2><span class="badge plain">{{ b.skill }}</span></div>
     <p class="chips"><a class="button small" href="{{ url_for('document', kind='brief', ref=b.brief_id) }}">{{ b.title }}</a></p>
+    {% if b.gain %}<div class="figures-row mt-12">
+      <div><b>{{ b.gain.coverage_now }} % → {{ b.gain.coverage_with }} %</b><span>{{ _('coverage of the offer by your optimal CV, without → with the project') }} ({{ '%+d'|format(b.gain.coverage_gain) }} {{ _('points') }})</span></div>
+      <div><b>{{ '%.0f'|format(b.gain.score_now) }} → {{ '%.0f'|format(b.gain.score_with) }}</b><span>{{ _('score of the offer') }} ({{ '%+.0f'|format(b.gain.score_gain) }} {{ _('points') }})</span></div>
+    </div>
+    <p class="small faint">{{ _('Estimation: the project skills counted at the working level, once the project is done and added to your profile.') }}{% if b.gain.still_missing %} {{ _('Still missing after the project:') }} {{ b.gain.still_missing|join(', ') }}.{% endif %}</p>{% endif %}
   </section>
   {% endfor %}
 

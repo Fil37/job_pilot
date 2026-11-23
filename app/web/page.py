@@ -195,6 +195,13 @@ def register(app, orch: Orchestrator) -> None:
     @app.post("/briefs/<brief_id>/demo")
     def brief_demo(brief_id: str):
         check_csrf()
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT json_extract(brief, '$.card.title') FROM project_briefs WHERE brief_id=?", (brief_id,)).fetchone()
+        if not row:
+            abort(404)
+        if not row[0]:
+            return redirect(url_for("brief_done", brief_id=brief_id,
+                                    error="Fill in the 'Project done' sheet first: the card is made from it."))
         if orch.busy() or not _run_lock.acquire(blocking=False):
             return redirect(url_for("home", msg="A run is already in progress."))
 
@@ -313,6 +320,11 @@ def register(app, orch: Orchestrator) -> None:
             drafts = [dict(r) for r in c.execute(f"SELECT * FROM followup_drafts WHERE application_id IN ({q})", ids)]
             briefs = [dict(r) for r in c.execute("SELECT brief_id, skill, title, status FROM project_briefs WHERE offer_id=?",
                                                  (offer_id,))]
+            from app.agent.agent004_offer_scorer import project_gain
+            for br in briefs:                       # PROJECT_GAIN, computed now (your profile may have changed)
+                br["gain"] = project_gain(c, offer_id, [x.strip() for x in br["skill"].split(",")],
+                                          criteria=orch.instance["criteria"], words=orch.schemas["words"],
+                                          scoring=orch.config["scoring"])
         company = {"facts": json.loads(comp[0]), "confidence": comp[1], "updated_at": comp[2]} if comp else None
         for sh in sheets:
             pth = Path(sh["path"])
@@ -503,6 +515,98 @@ def register(app, orch: Orchestrator) -> None:
                       (ans["title"], json.dumps(ans, ensure_ascii=False), brief_id))
         orch.store.log_event("info", "user_brief_edit", f"{brief_id}: edited by you", agent_id="user")
         return redirect(url_for("document", kind="brief", ref=brief_id))
+
+    # ------------------------------------------------------------------ "Projet réalisé" sheet → portfolio card (agent008)
+    def _grid_titles():
+        """Cards of your portfolio grid, read from the latest demo (a local copy of your public page)."""
+        from app.agent.agent008_portfolio_publisher import grid_titles
+        demos = sorted(orch.runs_dir.glob("*/portfolio_demo/" + orch.config["portfolio"]["file"]),
+                       key=lambda x: x.stat().st_mtime)
+        if not demos:
+            return []
+        try:
+            return grid_titles(demos[-1].read_text(encoding="utf-8"), orch.config["portfolio"]["grid_marker"])
+        except ValueError:
+            return []
+
+    @app.get("/docs/brief/<brief_id>/done")
+    def brief_done(brief_id: str):
+        b, _offer, _path = _brief(brief_id)
+        ans = b["brief"]
+        card = ans.get("card") or {}
+        skill = b["skill"].split(",")[0].strip()
+        form = {"short_name": card.get("short_name", skill.upper() if len(skill) <= 6 else skill.capitalize()),
+                "domain": card.get("domain", ""), "context": card.get("context", "Seul"),
+                "title": card.get("title", ans.get("title", "")), "summary": card.get("summary", ans.get("portfolio_summary", "")),
+                "details_title": card.get("details_title", "Architecture"), "details": card.get("details", ans.get("architecture", "")),
+                "tags": ", ".join(card.get("tags") or [x if len(x) <= 4 else x.capitalize() for x in
+                                                         [skill, *(ans.get("builds_on") or [])]]),
+                "link_url": card.get("link_url", ""), "link_label": card.get("link_label", "Code sur GitHub"),
+                "image_alt": card.get("image_alt", ""), "categories": card.get("categories") or [],
+                "position": card.get("position", "first"), "done_on": ans.get("done_on") or "",
+                "figures": (card.get("figures") or []) + [{"value": "", "label": ""}] * 3, "image_file": card.get("image_file")}
+        doc = {"kind": "brief", "ref": brief_id, "title": form["title"], "sections": [], "files": [],
+               "offer_id": b.get("offer_id"), "done": form, "error": request.args.get("error"),
+               "categories": orch.config["portfolio"].get("categories", {}), "grid": _grid_titles()}
+        return render_template("job_pilot_page.html", doc=doc)
+
+    @app.post("/docs/brief/<brief_id>/done")
+    def brief_done_save(brief_id: str):
+        """CARD_LIKE_YOURS: the card is made only from this sheet YOU fill (what you really built, your figures, your
+        link, your image); REAL_PROJECT_DATE and IMAGE_SAFE apply. Traced; nothing is published here."""
+        check_csrf()
+        from app.agent.agent008_portfolio_publisher import image_problem, parse_done_on
+        b, _offer, _path = _brief(brief_id)
+        f = {k: (request.form.get(k) or "").replace("\r\n", "\n").strip() for k in
+             ("short_name", "domain", "context", "title", "summary", "details_title", "details", "tags", "link_url",
+              "link_label", "image_alt", "position", "done_on")}
+
+        def back(msg):
+            return redirect(url_for("brief_done", brief_id=brief_id, error=msg))
+        if not (f["short_name"] and f["title"] and f["summary"]) or any(len(v) > 6000 for v in f.values()):
+            return back("A short name, a title and a summary are required.")
+        try:
+            done_on = parse_done_on(f["done_on"])
+        except ValueError:
+            return back("Give the real date of the project (not in the future).")
+        if f["link_url"] and not re.fullmatch(r"https://[^\s\"'<>]+", f["link_url"]):
+            return back("The link must start with https://")
+        cats = [x for x in request.form.getlist("categories") if x in orch.config["portfolio"].get("categories", {})]
+        if not cats:
+            return back("Choose at least one category of your portfolio.")
+        if not (f["position"] in ("first", "last") or f["position"].startswith("after:")):
+            f["position"] = "first"
+        figures = []
+        for i in range(3):
+            v, lab = (request.form.get(f"fig_value_{i}") or "").strip(), (request.form.get(f"fig_label_{i}") or "").strip()
+            if v:
+                figures.append({"value": v[:24], "label": lab[:100]})
+        card = {**{k: f[k] for k in ("short_name", "domain", "context", "title", "summary", "details_title", "details",
+                                     "link_url", "link_label", "image_alt", "position")},
+                "tags": [x.strip() for x in f["tags"].split(",") if x.strip()][:14], "categories": cats, "figures": figures,
+                "image_file": (b["brief"].get("card") or {}).get("image_file")}
+        up = request.files.get("image")
+        if up and up.filename:
+            data = up.read()
+            bad = image_problem(up.filename, data, orch.config["portfolio"].get("image_max_bytes", 2_000_000))
+            if bad:
+                return back(bad)
+            if not f["image_alt"]:
+                return back("Describe the image (alternative text) for people who cannot see it.")
+            folder = orch.runs_dir / "portfolio_assets"
+            folder.mkdir(parents=True, exist_ok=True)
+            dest = folder / f"{brief_id}{Path(up.filename).suffix.lower()}"
+            for old in folder.glob(f"{brief_id}.*"):
+                old.unlink()
+            dest.write_bytes(data)
+            card["image_file"] = str(dest)
+        if request.form.get("remove_image"):
+            card["image_file"] = None
+        ans = {**b["brief"], "card": card, "done_on": done_on}
+        with db_connect(orch.db_path) as c:
+            c.execute("UPDATE project_briefs SET brief=? WHERE brief_id=?", (json.dumps(ans, ensure_ascii=False), brief_id))
+        orch.store.log_event("info", "user_project_done", f"{brief_id}: 'Projet réalisé' sheet saved", agent_id="user")
+        return redirect(url_for("home", msg="Project sheet saved: make the demo to see the card.") + "#projects")
 
     # ------------------------------------------------------------------ documents in the application's look
     @app.get("/docs/<kind>/<ref>")

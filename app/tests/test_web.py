@@ -255,5 +255,44 @@ def test_you_can_edit_a_project_idea():
     assert cl.post("/docs/brief/b_e/edit", data={**form, "csrf": "bad"}).status_code == 400
 
 
+def test_project_done_sheet_makes_the_card():
+    """Remark of the user 2026-11-23 (CARD_LIKE_YOURS): no demo before the 'Projet réalisé' sheet; the sheet needs your
+    real date, a category of your portfolio and an https link; an image is checked (IMAGE_SAFE) and needs its
+    description; the saved sheet is traced."""
+    import io
+    import json as _json
+    orch, cl = client()
+    with sqlite3.connect(orch.db_path) as c:
+        c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) VALUES "
+                  "('b_d','verilog','Filtre FIR',?, ?,'proposed','r','2026-11-23')",
+                  (_json.dumps({"title": "Filtre FIR", "objective": "o", "portfolio_summary": "Filtre FIR simulé.",
+                                "architecture": "ADC puis FIR", "builds_on": ["vhdl"]}), str(orch.runs_dir / "r" / "b.md")))
+    (orch.runs_dir / "r").mkdir(parents=True, exist_ok=True)
+    tok = token(cl)
+    r = cl.post("/briefs/b_d/demo", data={"csrf": tok})
+    assert r.status_code == 302 and "/docs/brief/b_d/done" in r.headers["Location"]
+    page = cl.get("/docs/brief/b_d/done").data.decode()
+    assert 'name="fig_value_0"' in page and 'value="fpga"' in page and "Filtre FIR simulé." in page
+    form = {"csrf": tok, "done_on": "2025-05", "short_name": "Filtre FIR", "domain": "Conception numérique",
+            "context": "Seul", "title": "Un filtre FIR en Verilog", "summary": "Ce que j'ai construit.",
+            "fig_value_0": "48 dB", "fig_label_0": "d'atténuation mesurée", "details_title": "Architecture",
+            "details": "ADC puis FIR", "tags": "Verilog, FPGA", "link_url": "javascript:alert(1)", "link_label": "Code",
+            "categories": ["fpga", "nope"], "position": "after:Old one"}
+    assert "error=" in cl.post("/docs/brief/b_d/done", data=form).headers["Location"]        # link refused
+    form["link_url"] = "https://github.com/me/fir"
+    bad_img = {**form, "image": (io.BytesIO(b"<svg><script>x</script></svg>"), "a.svg"), "image_alt": "x"}
+    assert "error=" in cl.post("/docs/brief/b_d/done", data=bad_img, content_type="multipart/form-data").headers["Location"]
+    no_alt = {**form, "image": (io.BytesIO(b"\x89PNG data"), "a.png")}
+    assert "error=" in cl.post("/docs/brief/b_d/done", data=no_alt, content_type="multipart/form-data").headers["Location"]
+    ok = {**form, "image": (io.BytesIO(b"\x89PNG data"), "a.png"), "image_alt": "Le banc de mesure"}
+    assert "#projects" in cl.post("/docs/brief/b_d/done", data=ok, content_type="multipart/form-data").headers["Location"]
+    saved = _json.loads(sqlite3.connect(orch.db_path).execute("SELECT brief FROM project_briefs WHERE brief_id='b_d'").fetchone()[0])
+    card = saved["card"]
+    assert saved["done_on"] == "2025-05" and card["categories"] == ["fpga"] and card["position"] == "after:Old one"
+    assert card["figures"] == [{"value": "48 dB", "label": "d'atténuation mesurée"}] and card["tags"] == ["Verilog", "FPGA"]
+    assert Path(card["image_file"]).read_bytes() == b"\x89PNG data" and orch.runs_dir in Path(card["image_file"]).parents
+    assert sqlite3.connect(orch.db_path).execute("SELECT COUNT(*) FROM events WHERE code='user_project_done'").fetchone()[0] == 1
+
+
 if __name__ == "__main__":
     run_main(globals())
