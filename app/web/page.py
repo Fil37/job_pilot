@@ -165,7 +165,8 @@ def register(app, orch: Orchestrator) -> None:
                 "a.application_id ORDER BY received_at DESC LIMIT 1) AS last_mail FROM applications a JOIN offers o "
                 "USING(offer_id) ORDER BY a.created_at DESC LIMIT 50")]
             briefs = [dict(r) for r in c.execute(
-                "SELECT b.brief_id, b.skill, b.title, b.status, b.created_at, p.entry_id, p.status AS entry_status, "
+                "SELECT b.brief_id, b.skill, b.title, b.status, b.created_at, json_extract(b.brief, '$.done_on') AS done_on, "
+                "p.entry_id, p.status AS entry_status, "
                 "p.publish_at, p.expire_at, p.error FROM project_briefs b LEFT JOIN portfolio_entries p USING(brief_id) "
                 "ORDER BY b.created_at DESC LIMIT 10")]
             gaps = [dict(r) for r in c.execute("SELECT skill, offers_count, covered, triggered FROM skill_gaps WHERE window_end="
@@ -231,14 +232,22 @@ def register(app, orch: Orchestrator) -> None:
             return redirect(url_for("home", msg="Invalid date.") + "#projects")
         if exp and exp <= pub:
             return redirect(url_for("home", msg="Invalid date.") + "#projects")
+        from app.agent.agent008_portfolio_publisher import parse_done_on
+        try:
+            done_on = parse_done_on(request.form.get("done_on"))
+        except ValueError:
+            return redirect(url_for("home", msg="Give the real date of the project (not in the future).") + "#projects")
         cfg = orch.config["portfolio"]
         with db_connect(orch.db_path) as c:
-            row = c.execute("SELECT slug FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
-        if not row:
-            abort(404)
+            row = c.execute("SELECT p.slug, b.brief_id, b.brief FROM portfolio_entries p JOIN project_briefs b "
+                            "USING(brief_id) WHERE p.entry_id=?", (entry_id,)).fetchone()
+            if not row:
+                abort(404)
+            brief = {**json.loads(row[2]), "done_on": done_on}
+            c.execute("UPDATE project_briefs SET brief=? WHERE brief_id=?", (json.dumps(brief, ensure_ascii=False), row[1]))
         orch.store.request_approval("publish_portfolio_entry", entry_id, {
             "repo": cfg["repo"], "file": cfg["file"], "slug": row[0], "publish_at": pub.isoformat(timespec="minutes"),
-            "expire_at": exp.isoformat(timespec="minutes") if exp else None})
+            "expire_at": exp.isoformat(timespec="minutes") if exp else None, "done_on": done_on})
         return redirect(url_for("home", msg="Publication requested: approve it on the Supervision page.") + "#projects")
 
     @app.post("/runs")
@@ -446,6 +455,7 @@ def register(app, orch: Orchestrator) -> None:
         ans = b["brief"]
         form = {k: ans.get(k, "") for k in ("title", "objective", "portfolio_summary", "architecture", "interview_pitch")}
         form["builds_on"] = ", ".join(ans.get("builds_on") or [])
+        form["done_on"] = ans.get("done_on", "")
         for k in LIST_FIELDS:
             form[k] = "\n".join(ans.get(k) or [])
         form["steps"] = "\n".join(" | ".join(str(st.get(x, "")) for x in ("days", "milestone", "deliverable"))
@@ -465,6 +475,14 @@ def register(app, orch: Orchestrator) -> None:
              ("title", "objective", "portfolio_summary", "architecture", "interview_pitch", "builds_on", "steps", *LIST_FIELDS)}
         if not f["title"] or not f["objective"] or any(len(v) > 20000 for v in f.values()):
             return redirect(url_for("brief_edit", brief_id=brief_id, error="A title and an objective are required."))
+        from app.agent.agent008_portfolio_publisher import parse_done_on
+        done_on = (request.form.get("done_on") or "").strip()
+        if done_on:
+            try:
+                done_on = parse_done_on(done_on)
+            except ValueError:
+                return redirect(url_for("brief_edit", brief_id=brief_id,
+                                        error="Give the real date of the project (not in the future)."))
         bad = public_summary_problems(f["portfolio_summary"])
         if bad:
             return redirect(url_for("brief_edit", brief_id=brief_id,
@@ -477,7 +495,8 @@ def register(app, orch: Orchestrator) -> None:
         ans = {**b["brief"], "title": f["title"], "objective": f["objective"], "portfolio_summary": f["portfolio_summary"],
                "architecture": f["architecture"], "interview_pitch": f["interview_pitch"],
                "builds_on": [x.strip() for x in f["builds_on"].split(",") if x.strip()], "steps": steps,
-               **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS}, "edited_at": utc_now()}
+               **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS}, "edited_at": utc_now(),
+               "done_on": done_on or None}
         path.write_text(brief_markdown(offer, [x.strip() for x in b["skill"].split(",")], ans), encoding="utf-8")
         with db_connect(orch.db_path) as c:
             c.execute("UPDATE project_briefs SET title=?, brief=? WHERE brief_id=?",

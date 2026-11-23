@@ -44,6 +44,7 @@
     <form method="post" action="{{ url_for('brief_save', brief_id=doc.ref) }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <label>{{ _('Title') }}<input type="text" name="title" value="{{ doc.edit.title }}" required maxlength="300"></label>
+      <label class="mt-12">{{ _('Project done on (real date: AAAA, AAAA-MM or AAAA-MM-JJ)') }}<input type="text" name="done_on" value="{{ doc.edit.done_on or '' }}" placeholder="AAAA-MM" pattern="\d{4}(-\d{2}(-\d{2})?)?"></label>
       <label class="mt-12">{{ _('Objective') }}<textarea name="objective" rows="4" required>{{ doc.edit.objective }}</textarea></label>
       <label class="mt-12">{{ _('Builds on (comma-separated)') }}<input type="text" name="builds_on" value="{{ doc.edit.builds_on }}"></label>
       <label class="mt-12">{{ _('Architecture') }}<textarea name="architecture" rows="5">{{ doc.edit.architecture }}</textarea></label>

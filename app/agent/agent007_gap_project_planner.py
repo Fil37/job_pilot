@@ -93,6 +93,8 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
         md += ["", "## Résumé public (carte du portfolio)", "", ans["portfolio_summary"]]
     if offer and offer.get("url"):
         md += ["", f"Offre : {offer['url']}"]
+    if ans.get("done_on"):
+        md += ["", f"Réalisé en : {ans['done_on']} (date donnée par toi)."]
     if ans.get("edited_at"):
         md += ["", f"Modifié par toi le {ans['edited_at'][:16].replace('T', ' ')}."]
     return "\n".join(md) + "\n"

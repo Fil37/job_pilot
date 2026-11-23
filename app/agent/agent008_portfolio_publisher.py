@@ -59,7 +59,31 @@ def slugify(text: str) -> str:
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", fold(text))).strip("-")[:60].strip("-") or "projet"
 
 
-def card_html(brief: dict, skill: str, year: int, slug: str) -> str:
+def parse_done_on(text: str | None, today=None) -> str:
+    """REAL_PROJECT_DATE (rule of the user 2026-11-23: "des projets que j'ai déjà faits mais pas encore versionnés ne
+    doivent pas apparaître avec la date d'aujourd'hui"): the date YOU give for when the project was really done,
+    AAAA, AAAA-MM or AAAA-MM-JJ, never in the future. Raises ValueError otherwise."""
+    t = (text or "").strip()
+    m = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", t)
+    if not m:
+        raise ValueError("format AAAA, AAAA-MM ou AAAA-MM-JJ")
+    y, mo, d = int(m.group(1)), int(m.group(2) or 1), int(m.group(3) or 1)
+    when = datetime(y, mo, d)                     # ValueError for an impossible month or day
+    today = today or datetime.now()
+    if when > today or y < 1990:
+        raise ValueError("date dans le futur ou trop ancienne")
+    return t
+
+
+def card_year(brief: dict) -> int | None:
+    """Year shown on the card: the year of YOUR date of realisation, never today's (REAL_PROJECT_DATE)."""
+    try:
+        return int(parse_done_on(brief.get("done_on"))[:4])
+    except ValueError:
+        return None
+
+
+def card_html(brief: dict, skill: str, year: int | None, slug: str) -> str:
     """The card in the markup of your portfolio (compact article). Every text is HTML-escaped."""
     e = html.escape
     tags = "".join(f"<li>{e(t)}</li>" for t in [skill] + list(brief.get("builds_on") or [])[:5])
@@ -67,7 +91,7 @@ def card_html(brief: dict, skill: str, year: int, slug: str) -> str:
     return (f"<!-- job_pilot:begin {slug} -->\n"
             f'  <article class="proj compact" data-cat="{e(slugify(skill))}" data-type="perso">\n'
             f'    <div class="side"><strong>{e(skill.upper() if len(skill) <= 6 else skill.capitalize())}</strong>'
-            f'Projet personnel<br>{year}<span class="kind">Projet personnel</span></div>\n'
+            f'Projet personnel{f"<br>{year}" if year else ""}<span class="kind">Projet personnel</span></div>\n'
             f"    <div>\n      <h3>{e(brief['title'])}</h3>\n      <p>{e(brief.get('portfolio_summary') or brief['objective'])}</p>\n"
             f"      <details><summary>Architecture</summary><p>{e(brief['architecture'])}</p></details>\n"
             f"      <details><summary>Étapes</summary><p>{e(steps)}</p></details>\n"
@@ -149,6 +173,9 @@ class Agent(BaseAgent):
                 [{"objective": "remove", "kind": "remove", "entry_id": e} for e in exp]) or [{"objective": "nothing due", "kind": None}]
 
     def work(self, ctx: RunContext, subtasks):
+        ctx.store.register_check("REAL_PROJECT_DATE", AGENT_ID, "la carte affiche l'année de réalisation que tu as donnée, "
+                                 "jamais celle du jour ; pas de publication sans elle",
+                                 "règle de l'utilisateur 2026-11-23 : des projets déjà faits mais pas encore versionnés")
         ctx.store.register_check("PORTFOLIO_DIFF_SCOPE", AGENT_ID, "index.html seulement, et seulement entre les marqueurs job_pilot",
                                  "rule of the user: what goes outside is approved, nothing else changes")
         cfg = ctx.config["portfolio"]
@@ -196,7 +223,7 @@ class Agent(BaseAgent):
         shutil.rmtree(folder / ".git", ignore_errors=True)               # a demo is not a repository
         page = folder / cfg["file"]
         page.write_text(insert_card(page.read_text(encoding="utf-8"), slug,
-                                    card_html(b["brief"], b["skill"], datetime.now().year, slug), cfg["grid_marker"]),
+                                    card_html(b["brief"], b["skill"], card_year(b["brief"]), slug), cfg["grid_marker"]),
                         encoding="utf-8")
         entry_id = "p_" + sha(brief_id, 12)
         with ctx.connect() as c:
@@ -219,7 +246,10 @@ class Agent(BaseAgent):
         page = work / cfg["file"]
         text = page.read_text(encoding="utf-8")
         if kind == "publish":
-            new = insert_card(text, e["slug"], card_html(b["brief"], b["skill"], datetime.now().year, e["slug"]), cfg["grid_marker"])
+            year = card_year(b["brief"])
+            if year is None:                       # REAL_PROJECT_DATE: never published with today's date by default
+                raise ValueError("date de réalisation du projet absente : renseigne-la avant de publier")
+            new = insert_card(text, e["slug"], card_html(b["brief"], b["skill"], year, e["slug"]), cfg["grid_marker"])
             message = f"Add project {b['title']} (job_pilot, approved)"
         else:
             new = remove_card(text, e["slug"])

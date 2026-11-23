@@ -15,7 +15,7 @@ from conftest import SCHEMAS, env_vars, make_instance, make_orch, run_main  # no
 from app.agent.agent005_company_researcher import best_registry_match, company_key  # noqa: E402
 from app.agent import upsert  # noqa: E402
 from app.agent.agent007_gap_project_planner import offers_to_brief, window_gaps  # noqa: E402
-from app.agent.agent008_portfolio_publisher import Git, card_html, insert_card, remove_card  # noqa: E402
+from app.agent.agent008_portfolio_publisher import Git, card_html, card_year, insert_card, parse_done_on, remove_card  # noqa: E402
 from app.agent.agent011_pipeline_analyst import propose_weights  # noqa: E402
 
 GAPS = {"window_days": 30, "min_score": 55, "max_missing": 2, "max_briefs_per_run": 3}
@@ -23,7 +23,8 @@ BRIEF = {"title": "Bus CAN sur STM32 avec <script>", "objective": "Apprendre Kaf
          "portfolio_summary": "Chaîne de messages Kafka & co. entre un PC et une carte.", "builds_on": ["python", "sql"],
          "architecture": "Producteur Python → Kafka → consommateur", "hardware": ["PC"], "software": ["Kafka"],
          "steps": [{"days": f"J{i}", "milestone": f"étape {i}", "deliverable": "d"} for i in range(1, 6)],
-         "success_criteria": ["1000 messages/s"], "pitfalls": ["partitions"], "interview_pitch": "Projet d'apprentissage."}
+         "success_criteria": ["1000 messages/s"], "pitfalls": ["partitions"], "interview_pitch": "Projet d'apprentissage.",
+         "done_on": "2025-06"}
 
 
 def test_trigger_rules_are_computed_by_the_program():
@@ -171,6 +172,7 @@ def test_portfolio_demo_then_approved_publication_then_removal():
     orch.decide(aid, True)
     orch.run("portfolio")
     after = remote_index(bare)
+    assert "<br>2025" in after                  # REAL_PROJECT_DATE: your date, not today's
     assert "job_pilot:begin" in after and after.count("<article>old</article>") == 1
     st, sha_ = c.execute("SELECT status, commit_sha FROM portfolio_entries").fetchone()
     assert st == "published" and len(sha_) == 40
@@ -267,6 +269,22 @@ def test_unreachable_registry_is_a_retrieval_error_retried_later():
     facts = json.loads(c.execute("SELECT facts FROM companies").fetchone()[0])
     assert any(f["kind"] == "retrieval_error" for f in facts) and not any("non trouvée" in f["value"] for f in facts)
     assert c.execute("SELECT updated_at FROM companies").fetchone()[0].startswith("1970")
+
+
+def test_the_card_shows_your_real_date_never_today():
+    """Rule of the user 2026-11-23 (check REAL_PROJECT_DATE): a project already done but not versioned yet must not show
+    today's date: the card shows the year YOU gave, no year at all without it; a future date is refused."""
+    from datetime import datetime as _dt
+    assert card_year(BRIEF) == 2025 and "<br>2025" in card_html(BRIEF, "kafka", card_year(BRIEF), "s")
+    no_date = {k: v for k, v in BRIEF.items() if k != "done_on"}
+    assert card_year(no_date) is None and str(_dt.now().year) not in card_html(no_date, "kafka", None, "s")
+    for bad in ("2999-01", "2025-13", "juin 2025", ""):
+        try:
+            parse_done_on(bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+    assert parse_done_on("2024") == "2024" and parse_done_on("2024-02-29") == "2024-02-29"
 
 
 if __name__ == "__main__":

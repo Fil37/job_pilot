@@ -113,9 +113,15 @@ def test_alerts_projects_and_publication_request():
     assert cl.get("/portfolio/p_1/..%2F..%2F..%2Fjob_pilot.json").status_code == 404
     cl.post("/entries/p_1/publish", data={"csrf": tok, "publish_at": "2026-12-01T09:00", "expire_at": "2026-11-01T09:00"})
     assert not orch.store.approvals()[-1]["action"] == "publish_portfolio_entry"
+    # REAL_PROJECT_DATE: without your date of realisation, or with a date in the future, nothing is requested
     cl.post("/entries/p_1/publish", data={"csrf": tok, "publish_at": "2026-12-01T09:00"})
+    cl.post("/entries/p_1/publish", data={"csrf": tok, "publish_at": "2026-12-01T09:00", "done_on": "2999-01"})
+    assert not [a for a in orch.store.approvals() if a["action"] == "publish_portfolio_entry"]
+    cl.post("/entries/p_1/publish", data={"csrf": tok, "publish_at": "2026-12-01T09:00", "done_on": "2025-03"})
     appr = [a for a in orch.store.approvals() if a["action"] == "publish_portfolio_entry"]
     assert len(appr) == 1 and appr[0]["parameters"]["publish_at"] == "2026-12-01T09:00"
+    assert appr[0]["parameters"]["done_on"] == "2025-03"
+    assert '"done_on": "2025-03"' in c.execute("SELECT brief FROM project_briefs WHERE brief_id='b_1'").fetchone()[0]
     assert c.execute("SELECT status FROM portfolio_entries").fetchone()[0] == "demo"
 
 
@@ -231,7 +237,8 @@ def test_you_can_edit_a_project_idea():
     form = {"csrf": tok, "title": "Filtre FIR en Verilog sur FPGA", "objective": "Mon objectif à moi.",
             "builds_on": "vhdl, python", "architecture": "Chaîne ADC puis FIR", "hardware": "DE0-Nano\nCâbles",
             "software": "Icarus Verilog", "steps": "J1-J2 | Banc de test | tb.v\nJ3 | Synthèse", "success_criteria": "0 erreur",
-            "pitfalls": "timing", "interview_pitch": "Je l'ai conçu.", "portfolio_summary": "Pour apprendre Verilog."}
+            "pitfalls": "timing", "interview_pitch": "Je l'ai conçu.", "portfolio_summary": "Pour apprendre Verilog.",
+            "done_on": "2025-06"}
     r = cl.post("/docs/brief/b_e/edit", data=form)
     assert r.status_code == 302 and "error=" in r.headers["Location"]          # 'apprendre' refused on the public card
     form["portfolio_summary"] = "Filtre FIR en Verilog sur une carte DE0-Nano."
@@ -240,6 +247,7 @@ def test_you_can_edit_a_project_idea():
     title, saved = c.execute("SELECT title, brief FROM project_briefs WHERE brief_id='b_e'").fetchone()
     saved = _json.loads(saved)
     assert title == form["title"] and saved["hardware"] == ["DE0-Nano", "Câbles"] and saved["edited_at"]
+    assert saved["done_on"] == "2025-06" and "Réalisé en : 2025-06" in path.read_text()
     assert saved["steps"][1] == {"days": "J3", "milestone": "Synthèse", "deliverable": ""}
     text = path.read_text()
     assert text.startswith("# Filtre FIR en Verilog sur FPGA") and "Modifié par toi le" in text

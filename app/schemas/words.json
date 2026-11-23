@@ -952,7 +952,11 @@
    "Public summary (portfolio card)": "Résumé public (carte du portfolio)",
    "Save": "Enregistrer",
    "Cancel": "Annuler",
-   "A title and an objective are required.": "Un titre et un objectif sont obligatoires."
+   "A title and an objective are required.": "Un titre et un objectif sont obligatoires.",
+   "Project done on": "Projet réalisé en",
+   "done on": "réalisé en",
+   "Project done on (real date: AAAA, AAAA-MM or AAAA-MM-JJ)": "Projet réalisé en (date réelle : AAAA, AAAA-MM ou AAAA-MM-JJ)",
+   "Give the real date of the project (not in the future).": "Indique la date réelle du projet (pas dans le futur)."
   }
  },
  "skill_text": {
