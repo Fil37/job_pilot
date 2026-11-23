@@ -28,25 +28,26 @@ from app.agent import BaseAgent, RunContext, envelope, fold, sentences, upsert, 
 
 SKILLS = [
     {"skill_id": "SK_EXP_EXTRACT", "version": "1", "status": "proposed",
-     "objective": "Extract experience requirements from the full description, with the source sentence.",
-     "summary": "Years (\"3 ans\", \"2 à 4 ans\", \"au moins deux ans\", \"5+ years\") only in sentences about "
-                "experience; \"hors stage\" / \"hors alternance\"; junior and senior wording; the site's label. "
-                "Shown on the offer page (Experience filter)."},
+     "objective": "Extraire l'expérience demandée de la description complète, avec la phrase source.",
+     "summary": "Années (« 3 ans », « 2 à 4 ans », « au moins deux ans », « 5+ years ») seulement dans les phrases "
+                "qui parlent d'expérience ; « hors stage », « hors alternance » ; formulations junior et senior ; "
+                "libellé du site. Visible sur la page de l'offre (filtre d'expérience)."},
     {"skill_id": "SK_EXP_DECIDE", "version": "1", "status": "proposed",
-     "objective": "Decide keep / reject / review with a traceable reason; unclear cases go to review.",
-     "summary": "Limit = min(your max years, your countable years + stretch). Within → keep; just above → review; "
-                "clearly above → reject. Contradictions (junior + many years, label vs text, several numbers) → "
-                "review. Check DECISION_QUOTES_SOURCE. Review list on the home page."},
+     "objective": "Décider garder, rejeter ou à revoir avec une raison traçable ; les cas flous vont à revoir.",
+     "summary": "Limite = min(ton maximum d'années, tes années comptables + marge). Dans la limite : garder ; juste "
+                "au-dessus : à revoir ; nettement au-dessus : rejeter. Contradictions (junior et beaucoup d'années, "
+                "libellé contre texte, plusieurs nombres) et texte incomplet : à revoir. Contrôle "
+                "DECISION_QUOTES_SOURCE. Liste à revoir sur l'accueil."},
 ]
 
 AGENT_ID = "agent003"
 CHECKS = [  # named checks: (id, what it guarantees, real case that created it)
-    ("DECISION_QUOTES_SOURCE", "the quoted sentence is verbatim in the description", "rule of the method (traceability)"),
-    ("EXP_IGNORE_COMPANY_HORIZON", "company horizons are not experience requirements",
+    ("DECISION_QUOTES_SOURCE", "la phrase citée figure mot pour mot dans la description", "rule of the method (traceability)"),
+    ("EXP_IGNORE_COMPANY_HORIZON", "l'ancienneté de l'entreprise n'est pas une exigence d'expérience",
      "2026-11-21 Datadog 'Staff Software Engineer - Frontend': 'at least our next five years of growth' read as 5 years"),
-    ("EXP_CUMULATIVE_REQUIREMENTS", "several required figures add up: the highest binds",
+    ("EXP_CUMULATIVE_REQUIREMENTS", "plusieurs durées exigées : la plus haute s'applique",
      "2026-11-21 same offer: '10+ years' and '4+ years of leadership' sent to review instead of rejected"),
-    ("EXP_JUNIOR_STRICT", "bare 'junior'/'graduate' count in the title only",
+    ("EXP_JUNIOR_STRICT", "« junior » ou « graduate » seuls ne comptent que dans l'intitulé",
      "2026-11-21 same offer: 'from new university graduates to senior engineers' read as open to beginners"),
 ]
 NUM = r"(?<![a-z0-9+])(\d{1,2}|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|one|two|three|four|five|seven|eight|ten)"

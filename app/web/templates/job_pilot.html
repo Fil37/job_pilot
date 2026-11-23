@@ -56,7 +56,7 @@
         <button name="chain" value="inbox" class="ghost small"{% if busy %} disabled{% endif %}>✉ {{ _('Run the inbox check') }}</button>
         <button name="chain" value="weekly" class="ghost small"{% if busy %} disabled{% endif %}>Σ {{ _('Run the weekly analysis') }}</button></form></div>
     {% if alerts %}
-    <ul class="list">{% for a in alerts %}<li><span class="badge {{ 'running' if a.kind == 'immediate' else 'plain' }}">{{ _(a.category) }}</span><span>{{ a.message }}</span>
+    <ul class="list">{% for a in alerts %}<li><span class="badge {{ 'running' if a.kind == 'immediate' else 'plain' }}">{{ _(a.category) }}</span><span>{{ a.message }}</span>{% if a.category == 'full_text' and a.ref %}<a class="button ghost small" href="{{ url_for('offer', offer_id=a.ref) }}#full-text">{{ _('Open the offer') }}</a>{% endif %}
       <span class="small faint">{{ a.created_at[:16].replace('T', ' ') }}</span>
       <form method="post" action="{{ url_for('alert_seen', alert_id=a.alert_id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ghost small">✓ {{ _('Mark as seen') }}</button></form></li>{% endfor %}</ul>
     {% else %}<p class="empty small"><span class="big">🔕</span>{{ _('No alert.') }}</p>{% endif %}
@@ -69,7 +69,7 @@
       <thead><tr><th>{{ _('Score') }}</th><th>{{ _('Offer') }}</th><th>{{ _('Why') }}</th><th>{{ _('Missing') }}</th></tr></thead>
       <tbody>{% for r in digest.top %}<tr>
         <td><strong>{{ '%.0f'|format(r.score) }}</strong></td>
-        <td><a href="{{ url_for('offer', offer_id=r.offer_id) }}"><strong>{{ r.title }}</strong></a><br><span class="small faint">{{ r.company }} · {{ r.location or '?' }} · {{ r.contract or '?' }} · {{ r.source_id }}</span></td>
+        <td><a href="{{ url_for('offer', offer_id=r.offer_id) }}"><strong>{{ r.title }}</strong></a><br><span class="small faint">{{ r.company }} · {{ r.location or '?' }} · {{ r.contract or '?' }} · {{ _(r.source_id) }}</span></td>
         <td class="small">{{ r.why|join(' · ') }}</td>
         <td><span class="tags">{% for m in r.missing %}<span class="chip">{{ m }}</span>{% endfor %}</span></td>
       </tr>{% endfor %}</tbody></table></div>
@@ -83,7 +83,7 @@
       <thead><tr><th>{{ _('Offer') }}</th><th>{{ _('Reason') }}</th><th>{{ _('Source sentence') }}</th></tr></thead>
       <tbody>{% for r in digest.review %}<tr>
         <td><a href="{{ url_for('offer', offer_id=r.offer_id) }}"><strong>{{ r.title }}</strong></a><br><span class="small faint">{{ r.company }} · {{ '%.0f'|format(r.score) }}</span></td>
-        <td class="small"><span class="badge partial">{{ r.reason_code }}</span><br>{{ _(reasons.get(r.reason_code, '')) }}<br><span class="faint">{{ r.reason }}</span></td>
+        <td class="small"><span class="badge partial" title="{{ r.reason_code }}">{{ _(reasons.get(r.reason_code, r.reason_code)) }}</span><br><span class="faint">{{ r.reason }}</span></td>
         <td class="small">{% if r.source_sentence %}« {{ r.source_sentence }} »{% else %}{{ _('none') }}{% endif %}</td>
       </tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="empty small"><span class="big">✅</span>{{ _('No offer to review.') }}</p>{% endif %}
@@ -93,7 +93,7 @@
     <div class="panel-title"><h2>{{ _('Applications') }} <span class="count">{{ apps|length }}</span></h2></div>
     {% if apps %}
     <div class="scroll-box"><table><thead><tr><th>{{ _('Offer') }}</th><th>{{ _('Status') }}</th><th>{{ _('Mails') }}</th><th>CV</th></tr></thead>
-      <tbody>{% for a in apps %}<tr><td><a href="{{ url_for('offer', offer_id=a.offer_id) }}"><strong>{{ a.title }}</strong></a><br><span class="small faint">{{ a.company }} · {{ a.source_id }}</span></td>
+      <tbody>{% for a in apps %}<tr><td><a href="{{ url_for('offer', offer_id=a.offer_id) }}"><strong>{{ a.title }}</strong></a><br><span class="small faint">{{ a.company }} · {{ _(a.source_id) }}</span></td>
         <td><span class="badge {{ {'ready': 'partial', 'sent': 'running', 'interview': 'succeeded', 'technical_test': 'succeeded', 'offer': 'succeeded', 'rejected': 'failed'}.get(a.status, 'plain') }}">{{ _(a.status) }}</span><br><span class="small faint">{{ (a.sent_at or a.created_at)[:10] }}</span></td>
         <td class="small">{{ _(a.last_mail) if a.last_mail else _('none') }}</td><td class="small faint">{{ a.cv_version }}</td></tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="empty small">{{ _('No application yet.') }}</p>{% endif %}

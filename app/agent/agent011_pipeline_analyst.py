@@ -27,15 +27,15 @@ from app.agent import BaseAgent, RunContext, envelope, fold, sha, upsert, utc_no
 
 SKILLS = [
     {"skill_id": "SK_METRICS", "version": "1", "status": "proposed",
-     "objective": "Compute the monitoring figures of the job search.",
-     "summary": "Applications, answer rate, average delay to the first answer, interviews vs rejections, per source "
-                "and per job family; computed by the program (check METRICS_RECOMPUTABLE). Statistics panel of the "
-                "Supervision page."},
+     "objective": "Calculer les chiffres de suivi de la recherche.",
+     "summary": "Candidatures, taux de réponse, délai moyen avant la première réponse, entretiens contre refus, par "
+                "source et par famille de postes ; calculés par le programme (contrôle METRICS_RECOMPUTABLE). Panneau "
+                "Statistiques de la page Supervision."},
     {"skill_id": "SK_WEIGHT_TUNING", "version": "1", "status": "proposed",
-     "objective": "Propose new scoring weights from the results.",
-     "summary": "With at least min_outcomes answered applications: components higher in positive answers gain weight, "
-                "by at most max_weight_step each, sum kept at 1. Applied only after your approval (new weights "
-                "version)."},
+     "objective": "Proposer de nouveaux poids de score à partir des résultats.",
+     "summary": "Avec au moins min_outcomes candidatures ayant reçu une réponse : les composantes plus élevées dans "
+                "les réponses positives gagnent du poids, de max_weight_step au plus chacune, la somme restant à 1. "
+                "Appliqué seulement après ta validation (nouvelle version des poids)."},
 ]
 
 AGENT_ID = "agent011"
@@ -87,7 +87,7 @@ class Agent(BaseAgent):
     SKILLS = SKILLS
 
     def work(self, ctx: RunContext, subtasks):
-        ctx.store.register_check("METRICS_RECOMPUTABLE", AGENT_ID, "figures recomputed from the tables, never generated",
+        ctx.store.register_check("METRICS_RECOMPUTABLE", AGENT_ID, "chiffres recalculés à partir des tables, jamais générés",
                                  "rule of the method: every displayed figure is computed by the program")
         with ctx.connect() as c:
             apps = [dict(r) for r in c.execute(
@@ -137,7 +137,7 @@ class Agent(BaseAgent):
             neg = [vals(by_offer[k]) for k, v in outcome.items() if v == "negative" and k in by_offer]
             proposal = propose_weights(scoring["weights"], pos, neg, cfg["max_weight_step"])
         else:
-            note = f"{n_out} answered application(s), {cfg['min_outcomes']} needed before proposing new weights"
+            note = f"{n_out} candidature(s) avec réponse, {cfg['min_outcomes']} nécessaires avant de proposer de nouveaux poids"
         metrics["weights_note"] = note
         with ctx.connect() as c:
             upsert(c, ctx.rows, "metrics_snapshots", {"snapshot_id": "m_" + sha(ctx.run_id, 12), "metrics": metrics,

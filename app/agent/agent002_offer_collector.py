@@ -36,32 +36,37 @@ from app.agent import BaseAgent, RunContext, envelope, fold, sha, upsert, utc_no
 
 SKILLS = [
     {"skill_id": "SK_SOURCE_FETCH", "version": "1", "status": "proposed",
-     "objective": "Query each enabled source and log what was really queried.",
-     "summary": "France Travail API (OAuth client credentials from .env), manual inbox, Greenhouse and Lever public "
-                "boards of your target companies. Disabled or unconfigured sources are logged, never scraped. "
-                "Journal on the Supervision page (Sources queried)."},
+     "objective": "Interroger chaque source active et journaliser ce qui a vraiment été interrogé.",
+     "summary": "Pages publiques France Travail (tous les départements, texte complet de chaque offre, robots.txt "
+                "respecté), API publique Arbeitnow, boîte de dépôt manuelle, API publiques Greenhouse et Lever des "
+                "entreprises suivies. Une source désactivée ou non configurée est journalisée, jamais aspirée. "
+                "Journal sur la page Supervision (sources interrogées)."},
     {"skill_id": "SK_NORMALIZE", "version": "1", "status": "proposed",
-     "objective": "Convert every offer to one common format.",
-     "summary": "Title, company, location, contract, salary (min / max computed from the text), description as "
-                "plain text, dates, link. Check OFFER_MANDATORY_FIELDS: an offer without title, company, "
-                "description or link is dropped and counted."},
+     "objective": "Convertir chaque offre dans un format commun.",
+     "summary": "Intitulé, entreprise, lieu, contrat, salaire (min et max calculés à partir du texte), description en "
+                "texte brut, dates, lien. Contrôle OFFER_MANDATORY_FIELDS : une offre sans intitulé, entreprise, "
+                "description ou lien est écartée et comptée."},
     {"skill_id": "SK_DEDUP", "version": "1", "status": "proposed",
-     "objective": "Merge duplicates across aggregators, drop expired and already-processed offers.",
-     "summary": "Duplicate key = company + title + city without accents, legal suffixes and (H/F). The other "
-                "sources are kept as aliases (shown on the offer page, 'Seen on'). Expired offers are discarded."},
+     "objective": "Fusionner les doublons entre sources, écarter les offres expirées ou déjà traitées.",
+     "summary": "Clé de doublon = entreprise + intitulé + ville, sans accents, formes juridiques ni (H/F). Les autres "
+                "sources sont gardées comme alias (page de l'offre, « Vue sur »). Une version au texte complet "
+                "remplace un extrait. Les offres expirées sont écartées."},
 ]
 
 AGENT_ID = "agent002"
 CHECKS = [
-    ("OFFER_MANDATORY_FIELDS", "an offer without title, company, description or link is dropped and counted",
+    ("OFFER_MANDATORY_FIELDS", "une offre sans intitulé, entreprise, description ou lien est écartée et comptée",
      "rule of the method: an offer that cannot be judged is never stored half-empty"),
-    ("ROBOTS_ALLOWED", "a path forbidden by the site's robots.txt is never requested",
+    ("ROBOTS_ALLOWED", "une adresse interdite par le robots.txt du site n'est jamais demandée",
      "2026-11-21: France Travail forbids keyword search (*motsCles=*) to robots; HelloWork, Meteojob, WTTJ forbid scraping"),
-    ("SOURCE_INTERNAL_DUPLICATES", "one offer per external id inside a source",
+    ("SOURCE_INTERNAL_DUPLICATES", "une seule offre par identifiant externe dans une même source",
      "2026-11-21 test: France Travail returns the same offer for several title queries"),
-    ("TITLE_SHORT_SKILL", "a skill shorter than 3 letters never selects a title on its own",
+    ("TITLE_SHORT_SKILL", "une compétence de moins de 3 lettres ne retient jamais un intitulé à elle seule",
      "2026-11-23, Arbeitnow: your skill 'c' kept 'Product Manager Insurance P&C' and C#/.NET jobs"),
-    ("FT_ALL_DEPARTMENTS", "with mobility_france, every département page of your métiers is read (your zones first)",
+    ("FT_FULL_TEXT", "une offre France Travail est jugée sur son texte complet (lu dans le JSON que charge sa page "
+     "publique)",
+     "2026-11-23: 944 decisions 'à revoir' because the métier pages only give an excerpt of each offer"),
+    ("FT_ALL_DEPARTMENTS", "avec mobility_france, la page de chaque département de tes métiers est lue (tes zones d'abord)",
      "2026-11-23: 90 % of the offers came from Île-de-France and Haut-Rhin although you are mobile in all France"),
 ]
 LEGAL = r"\b(sas|sasu|sa|sarl|eurl|sca|gmbh|ltd|inc|group|groupe|france)\b"
@@ -87,7 +92,7 @@ class Http:
 
     def request(self, method: str, url: str, *, headers=None, data: dict | None = None) -> tuple[int, str]:
         if self.left <= 0:
-            raise SourceError("budget_exhausted", f"request budget of {self.source_id} exhausted")
+            raise SourceError("budget_exhausted", f"budget de requêtes de {self.source_id} épuisé")
         wait = self.cfg["http"]["min_delay_s"] - (time.monotonic() - self.last)
         if wait > 0 and self.transport is _urllib_transport:
             time.sleep(wait)
@@ -102,15 +107,15 @@ class Http:
         if status == 204:
             return None
         if status in (401, 403):
-            raise SourceError("access_denied", f"HTTP {status} on {urllib.parse.urlsplit(url).netloc}")
+            raise SourceError("access_denied", f"HTTP {status} sur {urllib.parse.urlsplit(url).netloc}")
         if status == 404:
-            raise SourceError("missing_data", f"HTTP 404 on {urllib.parse.urlsplit(url).path}")
+            raise SourceError("missing_data", f"HTTP 404 sur {urllib.parse.urlsplit(url).path}")
         if status not in (200, 206):
-            raise SourceError("source_unavailable", f"HTTP {status} on {urllib.parse.urlsplit(url).netloc}")
+            raise SourceError("source_unavailable", f"HTTP {status} sur {urllib.parse.urlsplit(url).netloc}")
         try:
             return json.loads(body)
         except json.JSONDecodeError as exc:
-            raise SourceError("software_failure", f"invalid JSON from {self.source_id}") from exc
+            raise SourceError("software_failure", f"JSON invalide reçu de {self.source_id}") from exc
 
 
 def _urllib_transport(method, url, headers, data, timeout):
@@ -124,7 +129,7 @@ def _urllib_transport(method, url, headers, data, timeout):
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", errors="replace")[:500]
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise SourceError("source_unavailable", f"network: {type(exc).__name__}") from exc
+        raise SourceError("source_unavailable", f"réseau : {type(exc).__name__}") from exc
 
 
 # =========================================================================== normalisation
@@ -223,12 +228,12 @@ FT_SEARCH_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres
 def fetch_france_travail(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:
     cid, secret = os.environ.get("FT_CLIENT_ID"), os.environ.get("FT_CLIENT_SECRET")
     if not cid or not secret:
-        raise SourceError("misconfiguration", "FT_CLIENT_ID / FT_CLIENT_SECRET missing in .env")
+        raise SourceError("misconfiguration", "FT_CLIENT_ID / FT_CLIENT_SECRET absents du .env")
     tok = http.json("POST", FT_TOKEN_URL, data={"grant_type": "client_credentials", "client_id": cid,
                                                 "client_secret": secret, "scope": "api_offresdemploiv2 o2dsoffre"})
     token = (tok or {}).get("access_token")
     if not token:
-        raise SourceError("access_denied", "France Travail returned no token")
+        raise SourceError("access_denied", "France Travail n'a renvoyé aucun jeton")
     zones = [z.get("ft_departement") for z in ctx.instance["criteria"].get("zones", []) if z.get("ft_departement")]
     queries = 0
     out = []
@@ -284,11 +289,11 @@ def _title_wanted(title: str, terms: dict) -> bool:
 def fetch_greenhouse(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:
     boards = [(c["name"], c["greenhouse"]) for c in ctx.instance["criteria"].get("target_companies", []) if c.get("greenhouse")]
     if not boards:
-        raise SourceError("misconfiguration", "no target company with a greenhouse board in job_pilot.json")
+        raise SourceError("misconfiguration", "aucune entreprise suivie avec un tableau Greenhouse dans job_pilot.json")
     out, q = [], 0
     for name, token in boards:
         if not re.fullmatch(r"[a-z0-9_-]{1,60}", token):
-            raise SourceError("misconfiguration", f"invalid greenhouse board token for {name}")
+            raise SourceError("misconfiguration", f"identifiant Greenhouse invalide pour {name}")
         data = http.json("GET", f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true")
         q += 1
         for j in (data or {}).get("jobs", []):
@@ -304,11 +309,11 @@ def fetch_greenhouse(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dic
 def fetch_lever(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:
     companies = [(c["name"], c["lever"]) for c in ctx.instance["criteria"].get("target_companies", []) if c.get("lever")]
     if not companies:
-        raise SourceError("misconfiguration", "no target company with a lever id in job_pilot.json")
+        raise SourceError("misconfiguration", "aucune entreprise suivie avec un identifiant Lever dans job_pilot.json")
     out, q = [], 0
     for name, cid in companies:
         if not re.fullmatch(r"[a-z0-9_-]{1,60}", cid):
-            raise SourceError("misconfiguration", f"invalid lever id for {name}")
+            raise SourceError("misconfiguration", f"identifiant Lever invalide pour {name}")
         data = http.json("GET", f"https://api.lever.co/v0/postings/{cid}?mode=json")
         q += 1
         for j in data or []:
@@ -399,7 +404,7 @@ def fetch_france_travail_web(ctx: RunContext, http: Http, terms: dict) -> tuple[
     http.left = spec.get("max_requests") or http.left        # the source's own budget replaces the generic one
     status, robots = http.request("GET", f"{FT_WEB}/robots.txt", headers={"Accept": "text/plain"})
     if status != 200:
-        raise SourceError("source_unavailable", f"robots.txt HTTP {status}: nothing read")
+        raise SourceError("source_unavailable", f"robots.txt HTTP {status} : rien n'a été lu")
     rules = robots_rules(robots)
     blocked = []
 
@@ -422,7 +427,7 @@ def fetch_france_travail_web(ctx: RunContext, http: Http, terms: dict) -> tuple[
         if words & tokens and (not must or words & must) and not words & exclude:
             national.setdefault(mm.group(2), []).append(mm.group(1))
     if not national:
-        raise SourceError("missing_data", "no France Travail métier page matches your titles")
+        raise SourceError("missing_data", "aucune page métier France Travail ne correspond à tes intitulés")
     criteria = ctx.instance["criteria"]
     depts = sorted({k for z in criteria.get("zones", []) for k in z.get("keywords", []) if re.fullmatch(r"\d{2}", k)})
     everywhere = bool(criteria.get("mobility_france"))
@@ -484,6 +489,81 @@ def fetch_arbeitnow(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict
     return out, pages
 
 
+FT_DETAIL = "/api-descriptifoffre/offre/"
+
+
+def ft_detail_fields(d: dict, words: dict) -> dict:
+    """Fields of a France Travail offer read from the JSON its public offer page loads (full text, experience asked)."""
+    exp = (d.get("experienceProfil") or {}).get("experience")
+    parts = [d.get("descriptif") or ""]
+    if exp:
+        parts.append(f"Expérience demandée : {exp}")
+    contract = normalize_contract(d.get("syntheseContrat"), words)
+    sal = d.get("salaire")
+    rec = {"description": "\n".join(p for p in parts if p).strip(), "label_experience": exp, "description_complete": True}
+    if contract:
+        rec["contract"] = contract
+    if sal:
+        rec["salary_text"] = sal
+        rec["salary_min"], rec["salary_max"] = parse_salary(sal)
+    return rec
+
+
+def reset_judgement(c, offer_id: str) -> None:
+    """The text of an offer changed: its automatic experience decision and its scores are recomputed at the next step
+    (agent003, agent004); a decision YOU took on the offer is kept."""
+    c.execute("DELETE FROM experience_decisions WHERE offer_id=? AND user_override IS NULL", (offer_id,))
+    c.execute("DELETE FROM scores WHERE offer_id=?", (offer_id,))
+
+
+def complete_ft_offers(ctx: RunContext, limit: int) -> dict:
+    """FT_FULL_TEXT: read the full text of the France Travail offers stored with an excerpt only, newest first."""
+    counts = {"completed": 0, "expired": 0, "failed": 0, "left": 0}
+    with ctx.connect() as c:
+        todo = [(r[0], r[1]) for r in c.execute(
+            "SELECT o.offer_id, MIN(a.external_id) FROM offers o JOIN offer_aliases a ON a.offer_id=o.offer_id AND "
+            "a.source_id='france_travail_web' WHERE o.description_complete=0 AND o.status='new' "
+            "GROUP BY o.offer_id ORDER BY o.first_seen_at DESC", ())]
+    counts["left"] = max(0, len(todo) - limit)
+    if not todo or limit <= 0:
+        return counts
+    http = Http(ctx, "france_travail_web")
+    http.left = limit + 1
+    status, robots = http.request("GET", f"{FT_WEB}/robots.txt", headers={"Accept": "text/plain"})
+    if status != 200:
+        counts["failed"] = len(todo[:limit])
+        return counts
+    rules = robots_rules(robots)
+    for offer_id, ext in todo[:limit]:
+        path = FT_DETAIL + urllib.parse.quote(ext)
+        if not re.fullmatch(r"[A-Za-z0-9]{5,12}", ext) or not robots_allowed(rules, path):   # ROBOTS_ALLOWED
+            counts["failed"] += 1
+            continue
+        try:
+            st, body = http.request("GET", FT_WEB + path, headers={"Accept": "application/json"})
+        except SourceError:
+            counts["failed"] += 1
+            continue
+        with ctx.connect() as c:
+            if st in (204, 404):                 # withdrawn by the employer
+                c.execute("UPDATE offers SET status='expired' WHERE offer_id=?", (offer_id,))
+                counts["expired"] += 1
+                continue
+            try:
+                d = json.loads(body) if st == 200 else None
+            except ValueError:
+                d = None
+            if not d or not d.get("descriptif"):
+                counts["failed"] += 1
+                continue
+            rec = ft_detail_fields(d, ctx.words)
+            c.execute(f"UPDATE offers SET {', '.join(k + '=?' for k in rec)} WHERE offer_id=?",
+                      [int(v) if isinstance(v, bool) else v for v in rec.values()] + [offer_id])
+            reset_judgement(c, offer_id)
+            counts["completed"] += 1
+    return counts
+
+
 FETCHERS = {"manual": fetch_manual, "france_travail": fetch_france_travail, "france_travail_web": fetch_france_travail_web,
             "greenhouse": fetch_greenhouse, "lever": fetch_lever, "arbeitnow": fetch_arbeitnow}
 
@@ -520,7 +600,7 @@ class Agent(BaseAgent):
             return line
         fn = FETCHERS.get(sid)
         if fn is None:
-            line.update(status="not_configured", error="no connector for this source yet (terms to check first)")
+            line.update(status="not_configured", error="pas encore de connecteur pour cette source (conditions d'utilisation à vérifier d'abord)")
             return line
         http = Http(ctx, sid)
         try:
@@ -581,6 +661,15 @@ class Agent(BaseAgent):
                                    "message": f"{line['source_id']}: {line['error']}"})
                 elif status == "not_configured":
                     warnings.append(f"{line['source_id']} not configured: {line['error']}")
+        ft = ctx.config["sources"].get("france_travail_web", {})
+        if ft.get("enabled") and ft.get("read_full_text", True):
+            full = complete_ft_offers(ctx, int(ctx.params.get("detail_max") or ft.get("detail_max_per_run", 250)))
+            totals["full_text"] = full["completed"]
+            outcomes.append({"check": "FT_FULL_TEXT", "outcome": "pass" if not full["failed"] else "kept_despite",
+                             "detail": f"{full['completed']} completed, {full['expired']} withdrawn, {full['failed']} "
+                                       f"not read, {full['left']} left for the next runs"})
+            if full["left"]:
+                warnings.append(f"france_travail_web : {full['left']} offre(s) encore connue(s) par un extrait (prochains passages)")
         ctx.store.record_outcomes(ctx.run_id, outcomes)
         active = [p for p in per_source if p["status"] not in ("disabled", "not_configured")]
         failed = [p for p in active if p["status"] == "failed"]
@@ -609,8 +698,14 @@ class Agent(BaseAgent):
             except ValueError:
                 pass
         key = dedup_key(o["company"], o["title"], o["location"])
-        existing = c.execute("SELECT offer_id, description FROM offers WHERE dedup_key=?", (key,)).fetchone()
+        existing = c.execute("SELECT offer_id, description, description_complete FROM offers WHERE dedup_key=?",
+                             (key,)).fetchone()
         if existing:
+            if existing[2] == 0 and o.get("description_complete", True) is not False:
+                # FT_FULL_TEXT: the same job seen elsewhere with its full text: the full text replaces the excerpt
+                c.execute("UPDATE offers SET description=?, description_complete=1 WHERE offer_id=?",
+                          (o["description"], existing[0]))
+                reset_judgement(c, existing[0])
             upsert(c, ctx.rows, "offer_aliases", {"source_id": o["source_id"], "external_id": o["external_id"],
                                                   "offer_id": existing[0], "url": o["url"], "seen_at": now})
             c.execute("UPDATE offers SET last_seen_at=? WHERE offer_id=?", (now, existing[0]))
@@ -625,8 +720,8 @@ class Agent(BaseAgent):
 
     def healthcheck(self, ctx=None):
         if ctx and ctx.config["sources"].get("france_travail", {}).get("enabled") and not os.environ.get("FT_CLIENT_ID"):
-            return "healthy", "France Travail not configured (FT_CLIENT_ID missing): other sources still work"
-        return "healthy", "sources configured"
+            return "healthy", "API France Travail non configurée (FT_CLIENT_ID absent) : les autres sources fonctionnent"
+        return "healthy", "sources configurées"
 
 
 if __name__ == "__main__":

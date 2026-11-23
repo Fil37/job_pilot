@@ -32,10 +32,11 @@ from app.agent.agent002_offer_collector import LEGAL, Http, SourceError
 
 SKILLS = [
     {"skill_id": "SK_COMPANY_BRIEF", "version": "1", "status": "proposed",
-     "objective": "Build a sourced company sheet for the best offers.",
-     "summary": "Registry (activity, size, category, creation, headquarters, public directors), Wikipedia summary, "
-                "hiring signal (offers seen in 30 days). Each fact has its source and kind; a doubtful name match "
-                "is a hypothesis (check COMPANY_MATCH_CONFIDENCE). Shown on the offer page and in the package."},
+     "objective": "Établir une fiche entreprise sourcée pour les meilleures offres.",
+     "summary": "Registre (activité, taille, catégorie, création, siège, dirigeants publics), résumé Wikipédia, "
+                "signal de recrutement (offres vues sur 30 jours). Chaque fait a sa source et sa nature ; une "
+                "correspondance de nom douteuse reste une hypothèse (contrôle COMPANY_MATCH_CONFIDENCE). Visible sur "
+                "la page de l'offre et dans le dossier."},
 ]
 
 AGENT_ID = "agent005"
@@ -105,7 +106,7 @@ class Agent(BaseAgent):
         return subs or [{"objective": "nothing to research", "name": None}]
 
     def work(self, ctx: RunContext, subtasks):
-        ctx.store.register_check("COMPANY_MATCH_CONFIDENCE", AGENT_ID, "a registry match under 0.6 is a hypothesis",
+        ctx.store.register_check("COMPANY_MATCH_CONFIDENCE", AGENT_ID, "une correspondance au registre sous 0,6 reste une hypothèse",
                                  "rule of the method: never present a doubtful match as a verified fact")
         cfg = ctx.config["company"]
         http = Http(ctx, "company_registry")
@@ -195,7 +196,7 @@ class Agent(BaseAgent):
                                  {"kind": "verified_fact", "ref": "fr.wikipedia.org"}])
 
     def healthcheck(self, ctx=None):
-        return "healthy", "public registry and Wikipedia APIs (no key)"
+        return "healthy", "API publiques du registre et de Wikipédia (sans clé)"
 
 
 if __name__ == "__main__":

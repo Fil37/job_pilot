@@ -40,15 +40,16 @@ from app.agent import supervision as sv
 
 SKILLS = [
     {"skill_id": "SK_MAIL_MATCH", "version": "1", "status": "proposed",
-     "objective": "Filter mails and link them to the right application.",
-     "summary": "Read-only IMAP (EXAMINE + BODY.PEEK; check MAIL_READ_ONLY). A mail is kept only if its sender "
-                "domain, its subject or its thread points to an application, or if it uses recruiting wording. "
-                "Only headers and the class are stored. Mails listed on the offer page."},
+     "objective": "Filtrer les mails et les rattacher à la bonne candidature.",
+     "summary": "IMAP en lecture seule (EXAMINE + BODY.PEEK ; contrôle MAIL_READ_ONLY). Un mail n'est gardé que si le "
+                "domaine de l'expéditeur, l'objet ou le fil renvoie à une candidature, ou s'il emploie un vocabulaire "
+                "de recrutement. Seuls les en-têtes et la catégorie sont conservés. Mails listés sur la page de "
+                "l'offre."},
     {"skill_id": "SK_MAIL_CLASSIFY", "version": "1", "status": "proposed",
-     "objective": "Classify a mail with a confidence; doubtful cases are flagged to you.",
-     "summary": "Rules first (words.json email_rules); DeepSeek only when the rules hesitate, on a short masked "
-                "excerpt. Immediate alert for interview, test, information request, offer; grouped for "
-                "acknowledgements and rejections. Alerts on the home page."},
+     "objective": "Classer un mail avec un niveau de confiance ; les cas douteux te sont signalés.",
+     "summary": "Règles d'abord (email_rules de words.json) ; DeepSeek seulement quand les règles hésitent, sur un "
+                "court extrait masqué. Alerte immédiate pour un entretien, un test, une demande d'information ou une "
+                "offre ; regroupée pour les accusés de réception et les refus. Alertes sur l'accueil."},
 ]
 
 AGENT_ID = "agent009"
@@ -199,7 +200,7 @@ class Agent(BaseAgent):
         return [{"objective": o} for o in ("read new mails (read-only)", "match to applications", "classify", "alerts")]
 
     def work(self, ctx: RunContext, subtasks):
-        ctx.store.register_check("MAIL_READ_ONLY", AGENT_ID, "no command other than EXAMINE / SEARCH / FETCH BODY.PEEK",
+        ctx.store.register_check("MAIL_READ_ONLY", AGENT_ID, "aucune commande autre que EXAMINE, SEARCH et FETCH BODY.PEEK",
                                  "rule of the user: the mailbox stays read-only")
         mcfg, cfg = self._mailbox_cfg(ctx), ctx.config["mail"]
         # APP_PASSWORD_SPACES (real case 2026-11-21): Google shows "abcd efgh ijkl mnop"; the spaces are not part of it
@@ -344,8 +345,8 @@ class Agent(BaseAgent):
 
     def healthcheck(self, ctx=None):
         if ctx and not os.environ.get(self._mailbox_cfg(ctx).get("password_env", "IMAP_PASSWORD")):
-            return "degraded", "IMAP_PASSWORD missing in .env: the inbox is not read yet"
-        return "healthy", "mailbox configured (read-only)"
+            return "degraded", "IMAP_PASSWORD absent du .env : la boîte mail n'est pas encore lue"
+        return "healthy", "boîte mail configurée (lecture seule)"
 
 
 if __name__ == "__main__":

@@ -47,32 +47,33 @@ from app.agent.agent004_offer_scorer import offer_skills
 
 SKILLS = [
     {"skill_id": "SK_CV_TAILOR", "version": "1", "status": "proposed",
-     "objective": "Choose projects, bullets and skills, adapt the title and profile paragraph, compile the PDF.",
-     "summary": "Bullets and projects ordered by the skills they share with the offer (computed). DeepSeek proposes "
-                "headline, tagline, profile paragraph and project order (ids); the program checks them. Compiled with "
-                "Tectonic --untrusted. Package listed on the offer page."},
+     "objective": "Choisir projets, lignes et compétences, adapter le titre et le paragraphe de profil, compiler le PDF.",
+     "summary": "Lignes et projets classés selon les compétences partagées avec l'offre (calculé). DeepSeek propose "
+                "le titre, l'accroche, le paragraphe de profil et l'ordre des projets ; le programme les vérifie. "
+                "Compilé avec Tectonic --untrusted. Dossier listé sur la page de l'offre."},
     {"skill_id": "SK_CV_FACTCHECK", "version": "1", "status": "proposed",
-     "objective": "Check that every figure and technology of the CV exists in the profile file.",
-     "summary": "Check CV_FACTS_FROM_PROFILE: numbers and lexicon technologies of the whole CV text must appear in "
-                "profile.yaml. A model text that fails is sent back with the defect and the allowed values (3 times "
-                "at most), then replaced by your own wording."},
+     "objective": "Vérifier que chaque chiffre et chaque technologie du CV existe dans le fichier profil.",
+     "summary": "Contrôle CV_FACTS_FROM_PROFILE : les nombres et les technologies du texte complet du CV doivent "
+                "figurer dans profile.yaml. Un texte du modèle en défaut lui est renvoyé avec le défaut et les "
+                "valeurs permises (3 fois au plus), puis remplacé par ta propre formulation."},
     {"skill_id": "SK_ATS_CHECK", "version": "1", "status": "proposed",
-     "objective": "Check the CV fits on one page and its text is readable by screening software.",
-     "summary": "Checks CV_ONE_PAGE (pdfinfo; tighter spacing, then fewer projects) and CV_ATS_TEXT (pdftotext finds "
-                "your name, e-mail, every section and every bullet, no unreadable character)."},
+     "objective": "Vérifier que le CV tient sur une page et que son texte est lisible par les logiciels de tri.",
+     "summary": "Contrôles CV_ONE_PAGE (pdfinfo ; espacements resserrés, puis moins de projets) et CV_ATS_TEXT "
+                "(pdftotext retrouve ton nom, ton e-mail, chaque section et chaque ligne, sans caractère illisible)."},
     {"skill_id": "SK_COVER_LETTER", "version": "1", "status": "proposed",
-     "objective": "Write the cover letter on the same principle when the offer asks for it.",
-     "summary": "Written only when the offer mentions a cover letter (or on request); 3 short paragraphs from your "
-                "profile facts; check LETTER_FACTS_FROM_PROFILE."},
+     "objective": "Rédiger la lettre de motivation sur le même principe quand l'offre la demande.",
+     "summary": "Écrite seulement si l'offre mentionne une lettre (ou à ta demande) ; 3 paragraphes courts tirés des "
+                "faits de ton profil ; contrôle LETTER_FACTS_FROM_PROFILE."},
 ]
 
 AGENT_ID = "agent006"
 CHECKS = [
-    ("CV_FACTS_FROM_PROFILE", "every figure and technology of the CV is in profile.yaml", "rule of the user (no invented content)"),
-    ("CV_ONE_PAGE", "the CV fits on one page", "rule of the user"),
-    ("CV_ATS_TEXT", "the PDF text is extractable: name, e-mail, sections, every bullet", "rule of the user (ATS)"),
-    ("LETTER_FACTS_FROM_PROFILE", "every figure and technology of the letter is in profile.yaml", "rule of the user"),
-    ("SUMMARY_WORDS_FROM_PROFILE", "every meaningful word of the model's headline / tagline / summary is in profile.yaml",
+    ("CV_FACTS_FROM_PROFILE", "chaque chiffre et chaque technologie du CV figure dans profile.yaml", "rule of the user (no invented content)"),
+    ("CV_ONE_PAGE", "le CV tient sur une page", "rule of the user"),
+    ("CV_ATS_TEXT", "le texte du PDF est extractible : nom, e-mail, sections, chaque ligne", "rule of the user (ATS)"),
+    ("LETTER_FACTS_FROM_PROFILE", "chaque chiffre et chaque technologie de la lettre figure dans profile.yaml", "rule of the user"),
+    ("SUMMARY_WORDS_FROM_PROFILE", "chaque mot porteur de sens du titre, de l'accroche et du profil proposés par le modèle figure "
+     "dans profile.yaml",
      "2026-11-21 Alice & Bob CV: 'avec un souci de robustesse et de maintenabilité' added by the model"),
 ]
 LABELS_FR = {"headline": "Titre", "tagline": "Accroche", "summary": "Résumé"}
@@ -319,14 +320,14 @@ class Agent(BaseAgent):
 
     def healthcheck(self, ctx=None):
         if ctx is None:
-            return "healthy", "not checked"
+            return "healthy", "non vérifié"
         if not engine(ctx):
-            return "critical", "Tectonic not installed (settings.latex.engine_path)"
+            return "critical", "Tectonic non installé (settings.latex.engine_path)"
         if not shutil.which("pdftotext") or not shutil.which("pdfinfo"):
-            return "critical", "poppler-utils (pdftotext, pdfinfo) missing"
+            return "critical", "poppler-utils (pdftotext, pdfinfo) absent"
         if not os.environ.get(ctx.config["llm"]["api_key_env"]):
-            return "degraded", "no model key: your own wordings will be used"
-        return "healthy", "tectonic, poppler and model key present"
+            return "degraded", "pas de clé de modèle : tes propres formulations seront utilisées"
+        return "healthy", "Tectonic, Poppler et clé du modèle présents"
 
     def work(self, ctx: RunContext, subtasks):
         for cid, name, origin in CHECKS:

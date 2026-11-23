@@ -31,15 +31,16 @@ from app.agent import (ROOT, BaseAgent, RunContext, contains_term, envelope, fol
 
 SKILLS = [
     {"skill_id": "SK_PROFILE_PARSE", "version": "1", "status": "proposed",
-     "objective": "Validate the profile source file and fingerprint it.",
-     "summary": "Checks required sections, unique ids, YYYY-MM dates, PROFILE_FIGURES_DECLARED (every number of a "
-                "wording is a declared figure) and PROFILE_SKILL_DECLARED (every skill of a bullet is in skills). "
-                "Counts months of internship / apprenticeship / job. Visible on the Supervision page (quality checks)."},
+     "objective": "Valider le fichier profil et calculer son empreinte.",
+     "summary": "Vérifie les sections obligatoires, les identifiants uniques, les dates AAAA-MM, "
+                "PROFILE_FIGURES_DECLARED (chaque nombre d'une formulation est un chiffre déclaré) et "
+                "PROFILE_SKILL_DECLARED (chaque compétence d'une ligne figure dans skills). Compte les mois de stage, "
+                "d'alternance et d'emploi. Visible sur la page Supervision (contrôles qualité)."},
     {"skill_id": "SK_SEARCH_TERMS", "version": "1", "status": "proposed",
-     "objective": "Derive keywords, neighbour job titles, core skills and eliminatory criteria from the profile.",
-     "summary": "Titles = your roles + the title families of words.json; keywords = your skills and their aliases; "
-                "core skills = level 'core' or proven by 2+ bullets; exclusions = avoided sectors, excluded "
-                "keywords and contracts. Deterministic, no model. Terms are listed on the home page."},
+     "objective": "Déduire du profil les mots-clés, les intitulés voisins, les compétences clés et les critères éliminatoires.",
+     "summary": "Intitulés = tes postes visés + les familles d'intitulés de words.json ; mots-clés = tes compétences "
+                "et leurs synonymes ; compétences clés = niveau « core » ou prouvées par au moins 2 lignes ; "
+                "exclusions = secteurs évités, mots exclus et contrats refusés. Calcul déterministe, sans modèle."},
 ]
 
 AGENT_ID = "agent001"

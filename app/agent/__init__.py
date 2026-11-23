@@ -315,7 +315,7 @@ class BaseAgent:
         return validate_envelope(env, ctx.schemas["reports"])
 
     def healthcheck(self, ctx: RunContext | None = None) -> tuple[str, str]:
-        return "healthy", "no external dependency"
+        return "healthy", "aucune dépendance externe"
 
 
 # =========================================================================== text helpers

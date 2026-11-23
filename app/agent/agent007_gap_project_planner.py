@@ -37,15 +37,17 @@ from app.agent.agent006_application_builder import ask_with_corrections
 
 SKILLS = [
     {"skill_id": "SK_GAP_AGGREGATE", "version": "2", "status": "proposed",
-     "objective": "Pick, offer by offer, the favourable offers that miss 1-2 skills; list the most missing skills.",
-     "summary": "Per offer (rule of 2026-11-23): not eliminated, experience keep/review, score >= min_score, 1-2 missing "
-                "skills absent from your profile, no brief yet; best scores first, max_briefs_per_run per run. Computed "
-                "by the program. The skills most often missing over 30 days are listed on the home page."},
+     "objective": "Choisir, offre par offre, les offres favorables auxquelles il manque 1 ou 2 compétences ; lister les manques les plus fréquents.",
+     "summary": "Par offre (règle du 2026-11-23) : non éliminée, expérience gardée ou à revoir, score au moins égal à "
+                "min_score, 1 ou 2 compétences absentes de ton profil, pas encore de brief ; meilleurs scores "
+                "d'abord, max_briefs_per_run par passage. Calculé par le programme. Les compétences les plus souvent "
+                "manquantes sur 30 jours sont affichées sur l'accueil."},
     {"skill_id": "SK_PROJECT_BRIEF", "version": "2", "status": "proposed",
-     "objective": "Design, for one offer, a realistic 1-2 week project brief teaching its missing skills.",
-     "summary": "Objective, architecture, hardware and software, steps and milestones, success criteria, pitfalls, "
-                "how to present it in an interview; names every missing skill of the offer, builds on your skills "
-                "(check BRIEF_STRUCTURE). Notified as an alert; the brief opens from the home page and the offer page."},
+     "objective": "Concevoir, pour une offre, un brief de projet réaliste de 1 à 2 semaines qui enseigne ses compétences manquantes.",
+     "summary": "Objectif, architecture, matériel et logiciels, étapes et jalons, critères de réussite, pièges, "
+                "comment le présenter en entretien ; nomme chaque compétence manquante de l'offre et s'appuie sur tes "
+                "compétences (contrôle BRIEF_STRUCTURE). Signalé par une alerte ; le brief s'ouvre depuis l'accueil "
+                "et la page de l'offre."},
 ]
 
 AGENT_ID = "agent007"
@@ -144,8 +146,8 @@ class Agent(BaseAgent):
         return path
 
     def work(self, ctx: RunContext, subtasks):
-        ctx.store.register_check("BRIEF_STRUCTURE", AGENT_ID, "every section, every target skill named, builds_on from "
-                                 "your skills, <= 10 working days",
+        ctx.store.register_check("BRIEF_STRUCTURE", AGENT_ID, "toutes les sections, chaque compétence visée nommée, builds_on tiré de tes compétences, 10 "
+     "jours ouvrés au plus",
                                  "rule of the user: a realistic 1-2 week project built on what you already know")
         cfg = ctx.config["gaps"]
         since = (datetime.now(timezone.utc) - timedelta(days=cfg["window_days"])).isoformat(timespec="seconds")

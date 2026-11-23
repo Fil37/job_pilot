@@ -37,7 +37,7 @@
     <section class="panel span-2">
       <div class="panel-title"><h2>{{ _('Runs in progress') }} <span class="count">{{ (runs_active or [])|length }}</span></h2></div>
       {% if runs_active %}
-      <ul class="list">{% for r in runs_active %}<li><span class="badge running">{{ _(r.status) }}</span><strong>{{ r.title or r.run_id }}</strong><span class="small faint">{{ r.created_at[:16].replace('T', ' ') }}</span></li>{% endfor %}</ul>
+      <ul class="list">{% for r in runs_active %}<li><span class="badge running">{{ _(r.status) }}</span><strong>{{ _(r.title) if r.title else r.run_id }}</strong><span class="small faint">{{ r.created_at[:16].replace('T', ' ') }}</span></li>{% endfor %}</ul>
       {% else %}<p class="empty small"><span class="big">☕</span>{{ _('Nothing running.') }}</p>{% endif %}
     </section>
 
@@ -54,7 +54,7 @@
       <div class="scroll-box mt-12"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('applications') }}</th><th>{{ _('Answered') }}</th><th>+</th><th>−</th></tr></thead>
         <tbody>{% for k, g2 in stats.by_source.items() %}<tr><td>{{ k }}</td><td>{{ g2.sent }}</td><td>{{ g2.answered }}</td><td>{{ g2.positive }}</td><td>{{ g2.negative }}</td></tr>{% endfor %}
         {% for k, g2 in stats.by_family.items() %}<tr><td class="faint">{{ k }}</td><td>{{ g2.sent }}</td><td>{{ g2.answered }}</td><td>{{ g2.positive }}</td><td>{{ g2.negative }}</td></tr>{% endfor %}</tbody></table></div>
-      {% if stats.weights_note %}<p class="hint mt-12">{{ stats.weights_note }}</p>{% endif %}
+      {% if stats.weights_note %}<p class="hint mt-12">{{ _(stats.weights_note) }}</p>{% endif %}
       {% else %}<p class="empty small">{{ _('No collection yet.') }}</p>{% endif %}
     </section>
 
@@ -63,7 +63,7 @@
       <div class="panel-title"><h2>{{ _('Sources queried') }} <span class="count">{{ sources|length }}</span></h2></div>
       {% if sources %}
       <div class="scroll-box"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('Status') }}</th><th>{{ _('Requests') }}</th><th>{{ _('Fetched') }}</th><th>{{ _('New') }}</th><th>{{ _('Merged') }}</th><th>{{ _('Error') }}</th></tr></thead>
-        <tbody>{% for s in sources %}<tr><td><strong>{{ s.source_id }}</strong></td><td><span class="badge {{ {'succeeded': 'succeeded', 'valid_empty_result': 'ok', 'failed': 'failed', 'partial': 'partial'}.get(s.status, 'skipped') }}">{{ _(s.status) }}</span></td><td>{{ s.queried }}</td><td>{{ s.fetched }}</td><td>{{ s.new_offers }}</td><td>{{ s.merged }}</td><td class="small">{{ s.error or '' }}</td></tr>{% endfor %}</tbody></table></div>
+        <tbody>{% for s in sources %}<tr><td><strong>{{ _(s.source_id) }}</strong><br><span class="small faint">{{ s.source_id }}</span></td><td><span class="badge {{ {'succeeded': 'succeeded', 'valid_empty_result': 'ok', 'failed': 'failed', 'partial': 'partial'}.get(s.status, 'skipped') }}">{{ _(s.status) }}</span></td><td>{{ s.queried }}</td><td>{{ s.fetched }}</td><td>{{ s.new_offers }}</td><td>{{ s.merged }}</td><td class="small">{{ _(s.error) if s.error else '' }}</td></tr>{% endfor %}</tbody></table></div>
       {% else %}<p class="empty small">{{ _('No collection yet.') }}</p>{% endif %}
     </section>
 
@@ -71,13 +71,13 @@
     <section class="panel span-2">
       <div class="panel-title"><h2>{{ _('Recent runs') }} <span class="count">{{ (runs_recent or [])|length }}</span></h2></div>
       <div class="scroll-box"><table><thead><tr><th>{{ _('Run') }}</th><th>{{ _('Status') }}</th><th>{{ _('Summary') }}</th></tr></thead>
-        <tbody>{% for r in (runs_recent or [])[:20] %}<tr><td><strong>{{ r.title or r.run_id }}</strong><br><span class="small faint">{{ r.run_id }}</span></td><td><span class="badge {{ r.status }}">{{ _(r.status) }}</span></td><td class="small">{{ (r.totals|fromjson).get('summary', '') if r.totals else '' }}</td></tr>{% endfor %}</tbody></table></div>
+        <tbody>{% for r in (runs_recent or [])[:20] %}<tr><td><strong>{{ _(r.title) if r.title else r.run_id }}</strong><br><span class="small faint">{{ r.run_id }}</span></td><td><span class="badge {{ r.status }}">{{ _(r.status) }}</span></td><td class="small">{{ _((r.totals|fromjson).get('summary', '')) if r.totals else '' }}</td></tr>{% endfor %}</tbody></table></div>
     </section>
 
     <section class="panel">
       <div class="panel-title"><h2>{{ _('Agents: health') }}</h2><button type="button" class="ghost small">{{ _('Re-check') }}</button></div>
       <ul class="list">
-        {% for a in agents %}<li><span class="badge {{ a.state }}">{{ _(a.state) }}</span><strong>{{ a.id }}</strong><span class="small faint">{{ a.detail or '' }}{% if a.when %} · {{ a.when[:16].replace('T', ' ') }}{% endif %}</span></li>{% endfor %}
+        {% for a in agents %}<li><span class="badge {{ a.state }}">{{ _(a.state) }}</span><strong>{{ a.id }}</strong> <span class="small">{{ _(a.id) }}</span><span class="small faint">{{ _(a.detail) if a.detail else '' }}{% if a.when %} · {{ a.when[:16].replace('T', ' ') }}{% endif %}</span></li>{% endfor %}
       </ul>
     </section>
 
@@ -85,7 +85,7 @@
       <div class="panel-title"><h2>{{ _('Incidents') }} <span class="count">{{ incidents|length }}</span></h2></div>
       {% if incidents %}
       <div class="scroll-box"><table><thead><tr><th>#</th><th>{{ _('Agent') }}</th><th>{{ _('Error') }}</th><th>{{ _('Action') }}</th></tr></thead>
-        <tbody>{% for i in incidents %}<tr><td>{{ i.id }}</td><td>{{ i.agent }}<br><span class="badge failed">{{ i.error_category }}</span></td><td class="small">{{ i.message }}</td>
+        <tbody>{% for i in incidents %}<tr><td>{{ i.id }}</td><td>{{ i.agent }}<br><span class="badge failed">{{ _(i.error_category) }}</span></td><td class="small">{{ _(i.message) }}</td>
           <td><form method="post" action="{{ url_for('incident_close', incident_id=i.id) }}" class="inline">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <button name="status" value="resolved" class="good small">{{ _('Resolved') }}</button>
@@ -101,7 +101,7 @@
           <button type="submit" class="ghost small">{{ _('Propose skill activations') }}</button></form></div>
       {% if approvals %}
       <div class="scroll-box"><table><thead><tr><th>{{ _('Action') }}</th><th>{{ _('Target') }}</th><th>{{ _('Parameters') }}</th><th>{{ _('Decision') }}</th></tr></thead>
-        <tbody>{% for a in approvals %}<tr><td><strong>{{ a.action }}</strong></td><td><code>{{ a.target }}</code></td><td class="small">{% if a.action == 'activate_skill' and a.skill %}<strong>{{ _(a.skill.objective or '') }}</strong><p>{{ _(a.skill.summary or '') }}</p>{% else %}{{ a.parameters|tojson }}{% endif %}</td>
+        <tbody>{% for a in approvals %}<tr><td><strong>{{ _(a.action) }}</strong></td><td><code>{{ a.target }}</code></td><td class="small">{% if a.action == 'activate_skill' and a.skill %}<strong>{{ _(a.skill.objective or '') }}</strong><p>{{ _(a.skill.summary or '') }}</p>{% else %}{{ a.parameters|tojson }}{% endif %}</td>
           <td><form method="post" action="{{ url_for('approval_decide', approval_id=a.approval_id) }}" class="inline">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <button name="decision" value="approve" class="good small">{{ _('Approve') }}</button>
@@ -121,7 +121,7 @@
     <section class="panel">
       <div class="panel-title"><h2>{{ _('Quality checks') }}</h2>{% if ratings %}<span class="chip">👍 <b>{{ ratings.good }}</b> · 👎 <b>{{ ratings.bad }}</b></span>{% endif %}</div>
       <div class="scroll-box"><table><thead><tr><th>{{ _('Check') }}</th><th>{{ _('Outcome') }}</th><th>{{ _('Count') }}</th></tr></thead>
-        <tbody>{% for c in checks or [] %}<tr><td title="{{ c.origin_case }}"><strong>{{ c.check_id }}</strong></td><td><span class="badge {{ {'pass': 'pass', 'corrected': 'corrected', 'kept_despite': 'failed'}.get(c.outcome, 'plain') }}">{{ _(c.outcome) }}</span></td><td>{{ c.count }}</td></tr>{% endfor %}</tbody></table></div>
+        <tbody>{% for c in checks or [] %}<tr><td title="{{ c.origin_case }}"><strong>{{ c.check_id }}</strong>{% if c.name and c.name != c.check_id %}<br><span class="small muted">{{ _(c.name) }}</span>{% endif %}</td><td><span class="badge {{ {'pass': 'pass', 'corrected': 'corrected', 'kept_despite': 'failed'}.get(c.outcome, 'plain') }}">{{ _(c.outcome) }}</span></td><td>{{ c.count }}</td></tr>{% endfor %}</tbody></table></div>
     </section>
 
     {# ---- sauvegardes et disque (socle 2.0 : backups(), disk_usage()) #}

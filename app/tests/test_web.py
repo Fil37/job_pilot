@@ -54,7 +54,7 @@ def test_templates_have_no_inline_style_or_handler():
 def test_every_post_needs_the_csrf_token():
     """Case: run launch, manual offer, decision, approvals, incidents without token → 400."""
     orch, cl = client()
-    for url in ("/runs", "/inbox", "/offers/x/decision", "/approvals/1", "/skills/propose", "/incidents/1/close"):
+    for url in ("/runs", "/inbox", "/offers/x/decision", "/offers/x/full_text", "/approvals/1", "/skills/propose", "/incidents/1/close"):
         assert cl.post(url, data={}).status_code == 400, url
 
 
@@ -144,6 +144,68 @@ def test_documents_are_rendered_in_the_app_look_and_escaped():
     for f in TEMPLATES.glob("*.html"):
         visible = re.sub(r"\{#.*?#\}", "", f.read_text(encoding="utf-8"), flags=re.S)
         assert "—" not in visible, f.name
+
+
+def test_a_promising_partial_offer_comes_to_you_and_your_full_text_is_judged():
+    """Rule of the user 2026-11-23 (ASK_FULL_TEXT): a promising offer known by an excerpt only raises one alert
+    linking to its page; the pasted full text replaces the excerpt, is traced, and the offer is judged again (your own
+    decision kept); a too short paste is refused."""
+    import time
+    orch, cl = client()
+    c = sqlite3.connect(orch.db_path)
+    oid, score = c.execute("SELECT offer_id, score FROM scores ORDER BY score DESC").fetchone()
+    with c:
+        c.execute("UPDATE offers SET description_complete=0 WHERE offer_id=?", (oid,))
+        c.execute("DELETE FROM scores WHERE offer_id=?", (oid,))
+    orch.run("rescore")
+    orch.run("rescore")                                     # once only
+    assert score >= 55 and c.execute("SELECT COUNT(*) FROM alerts WHERE category='full_text' AND ref=?",
+                                     (oid,)).fetchone()[0] == 1
+    assert f"/offers/{oid}#full-text" in cl.get("/").data.decode()
+    assert 'id="full-text"' in cl.get(f"/offers/{oid}").data.decode()
+    tok = token(cl)
+    assert cl.post(f"/offers/{oid}/full_text", data={"csrf": tok, "text": "trop court"}).status_code == 400
+    text = "Ingénieur systèmes embarqués junior. " * 10 + "Débutant accepté. Python, SQL."
+    assert cl.post(f"/offers/{oid}/full_text", data={"csrf": tok, "text": text}).status_code == 302
+    for _ in range(100):                                    # the rescore runs in the background
+        if not orch.busy() and c.execute("SELECT 1 FROM scores WHERE offer_id=?", (oid,)).fetchone():
+            break
+        time.sleep(0.1)
+    desc, complete = c.execute("SELECT description, description_complete FROM offers WHERE offer_id=?", (oid,)).fetchone()
+    assert desc == text.strip() and complete == 1
+    assert c.execute("SELECT 1 FROM experience_decisions WHERE offer_id=?", (oid,)).fetchone()
+    assert c.execute("SELECT COUNT(*) FROM events WHERE code='user_full_text'").fetchone()[0] == 1
+    assert 'id="full-text"' not in cl.get(f"/offers/{oid}").data.decode()
+
+
+def test_the_interface_is_really_french():
+    """Remark of the user 2026-11-23 ("la partie du site FR n'est pas vraiment FR"): French by default; skills, check
+    names, sources, agents, incident categories and approval actions have French texts; generated English sentences of
+    older runs are translated on display."""
+    import importlib
+    import json as _json
+    import re as _re
+    from app.agent.agent000_job_pilot import ALLOWED_MODULES
+    words = _json.loads((ROOT / "app/schemas/words.json").read_text())
+    fr = words["ui_text"]["fr"]
+    english = _re.compile(r"\b(the|and|of|with|every|only|your|is|are)\b")
+    for mod in ALLOWED_MODULES.values():
+        m = importlib.import_module(mod)
+        for k in m.SKILLS:
+            assert not english.search(k["objective"]) and not english.search(_re.sub(r"[A-Z_]{4,}|\S+\.\w+", "", k["summary"])), k
+        for check in getattr(m, "CHECKS", []):
+            assert not english.search(check[1]), check
+    settings = _json.loads((ROOT / "app/schemas/settings.json").read_text())
+    for key in list(settings["defaults"]["sources"]) + list(ALLOWED_MODULES) + ["agent000", "timeout", "software_failure",
+                                                                              "activate_skill", "publish_portfolio_entry"]:
+        assert key in fr, key
+    orch, cl = client()
+    home = cl.get("/").data.decode()
+    assert 'lang="fr"' in home or "Accueil" in home
+    with sqlite3.connect(orch.db_path) as c:
+        c.execute("UPDATE sup_runs SET title='daily (scheduler)'")
+    page = cl.get("/standup").data.decode()
+    assert "quotidienne (planificateur)" in page and "(scheduler)" not in page
 
 
 if __name__ == "__main__":

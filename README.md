@@ -44,7 +44,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | Source | Accès | État |
 |---|---|---|
 | Arbeitnow (API publique gratuite, sans clé) | 3 pages de 300 offres au plus par jour, texte complet ; tous les pays gardés, l'étranger est marqué « hors de France » au score | active |
-| France Travail (pages publiques) | pages métier × département des plans du site officiels (tous les départements avec `mobility_france`, tes zones d'abord, 200 requêtes au plus) ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; extraits seulement | active |
+| France Travail (pages publiques) | pages métier × département des plans du site officiels (tous les départements avec `mobility_france`, tes zones d'abord, 200 requêtes au plus) ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; **texte complet** de chaque offre lu ensuite dans le JSON que sa page publique charge elle-même (`/api-descriptifoffre/offre/<id>`, autorisé par le robots.txt), 250 offres au plus par passage, les plus récentes d'abord | active |
 | France Travail (API) | fermée aux nouvelles applications depuis 2026-10 (data.gouv.fr) ; tes identifiants n'obtiennent que le droit « application » | désactivée |
 | Offres collées à la main | formulaire de l'accueil (LinkedIn, Indeed, tout site) | active |
 | Greenhouse, Lever | API publiques de job boards des entreprises cibles (Alice & Bob) | active |
@@ -89,3 +89,12 @@ Contrôles nommés issus de vrais cas : `EXP_IGNORE_COMPANY_HORIZON`, `EXP_CUMUL
 
 Style et supervision issus de `studio-kit` 2.2 : `app/static/css/job_pilot_master.css` (+ une classe `.pre-line`
 proposée pour le kit), `app/agent/supervision.py` et `app/tests/test_supervision.py`.
+
+## Offres connues par un extrait seulement
+
+Une offre dont job_pilot n'a qu'un extrait n'est jamais rejetée faute d'information : elle va « à revoir ». Si elle est
+prometteuse (non éliminée, score d'au moins 55), une alerte « texte complet » te l'amène une seule fois. Sur sa page,
+ouvre l'offre sur son site, copie tout le texte et colle-le dans « Coller le texte complet » : il remplace l'extrait
+(événement `user_full_text` tracé), l'offre est rejugée (expérience, score) et une décision que tu avais prise reste.
+Quand la même offre arrive par une autre source avec son texte complet, ce texte remplace aussi l'extrait.
+

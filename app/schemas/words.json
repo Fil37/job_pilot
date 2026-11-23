@@ -794,7 +794,7 @@
    "Outside your areas (and not remote).": "Hors de tes zones (et pas en télétravail).",
    "Contains a keyword you excluded.": "Contient un mot-clé que tu as exclu.",
    "Rejected by the experience filter.": "Rejetée par le filtre d'expérience.",
-   "France (mobility)": "France (mobilité)",
+   "France (mobility)": "France (mobile partout)",
    "Application package": "Paquet de candidature",
    "Application started.": "Préparation de la candidature lancée.",
    "Mark as sent": "Marquer comme envoyée",
@@ -858,7 +858,87 @@
    "not stated": "non précisé",
    "not yet": "pas encore",
    "Open the package": "Ouvrir le paquet",
-   "Project idea": "Idée de projet"
+   "Project idea": "Idée de projet",
+   "full_text": "texte complet",
+   "Paste the full text": "Coller le texte complet",
+   "Only an excerpt of this offer is known. Copy the whole offer from its site and paste it here: it will be judged again on the full text.": "Seul un extrait de cette offre est connu. Copie toute l'offre depuis son site et colle-la ici : elle sera rejugée sur le texte complet.",
+   "Open the offer on its site": "Ouvrir l'offre sur son site",
+   "Full text saved: the offer is judged again.": "Texte complet enregistré : l'offre est rejugée.",
+   "france_travail": "France Travail (API)",
+   "france_travail_web": "France Travail (pages publiques)",
+   "arbeitnow": "Arbeitnow",
+   "greenhouse": "Greenhouse (entreprises suivies)",
+   "lever": "Lever (entreprises suivies)",
+   "manual": "Dépôt manuel",
+   "hellowork": "HelloWork",
+   "welcome_to_the_jungle": "Welcome to the Jungle",
+   "apec": "APEC",
+   "jobteaser": "JobTeaser",
+   "linkedin_alerts": "Alertes LinkedIn",
+   "indeed_alerts": "Alertes Indeed",
+   "meteojob": "Meteojob",
+   "agent000": "orchestrateur",
+   "agent001": "profil",
+   "agent002": "collecte des offres",
+   "agent003": "filtre d'expérience",
+   "agent004": "score des offres",
+   "agent005": "recherche entreprise",
+   "agent006": "dossier de candidature",
+   "agent007": "projets à réaliser",
+   "agent008": "portfolio",
+   "agent009": "boîte mail",
+   "agent010": "entretiens et relances",
+   "agent011": "analyse du suivi",
+   "timeout": "délai dépassé",
+   "software_failure": "panne logicielle",
+   "source_unavailable": "source indisponible",
+   "access_denied": "accès refusé",
+   "missing_data": "donnée absente",
+   "misconfiguration": "configuration",
+   "budget_exhausted": "budget épuisé",
+   "model_error": "erreur du modèle",
+   "invalid_output": "sortie invalide",
+   "activate_skill": "activer une skill",
+   "create_calendar_event": "créer un rendez-vous",
+   "send_followup": "valider une relance",
+   "publish_portfolio_entry": "publier sur le portfolio",
+   "apply_scoring_weights": "appliquer de nouveaux poids",
+   "an offer without title, company, description or link is dropped and counted": "une offre sans intitulé, entreprise, description ou lien est écartée et comptée",
+   "one offer per external id inside a source": "une seule offre par identifiant externe dans une même source",
+   "a path forbidden by the site's robots.txt is never requested": "une adresse interdite par le robots.txt du site n'est jamais demandée",
+   "with mobility_france, every département page of your métiers is read (your zones first)": "avec mobility_france, la page de chaque département de tes métiers est lue (tes zones d'abord)",
+   "a skill shorter than 3 letters never selects a title on its own": "une compétence de moins de 3 lettres ne retient jamais un intitulé à elle seule",
+   "a France Travail offer is judged on its full text (read from the JSON its public page loads)": "une offre France Travail est jugée sur son texte complet (lu dans le JSON que charge sa page publique)",
+   "the quoted sentence is verbatim in the description": "la phrase citée figure mot pour mot dans la description",
+   "company horizons are not experience requirements": "l'ancienneté de l'entreprise n'est pas une exigence d'expérience",
+   "several required figures add up: the highest binds": "plusieurs durées exigées : la plus haute s'applique",
+   "bare 'junior'/'graduate' count in the title only": "« junior » ou « graduate » seuls ne comptent que dans l'intitulé",
+   "score = 100 x weighted sum of the components": "score = 100 x somme pondérée des composantes",
+   "a registry match under 0.6 is a hypothesis": "une correspondance au registre sous 0,6 reste une hypothèse",
+   "every figure and technology of the CV is in profile.yaml": "chaque chiffre et chaque technologie du CV figure dans profile.yaml",
+   "the CV fits on one page": "le CV tient sur une page",
+   "the PDF text is extractable: name, e-mail, sections, every bullet": "le texte du PDF est extractible : nom, e-mail, sections, chaque ligne",
+   "every figure and technology of the letter is in profile.yaml": "chaque chiffre et chaque technologie de la lettre figure dans profile.yaml",
+   "every meaningful word of the model's headline / tagline / summary is in profile.yaml": "chaque mot porteur de sens du titre, de l'accroche et du profil proposés par le modèle figure dans profile.yaml",
+   "every section, every target skill named, builds_on from your skills, <= 10 working days": "toutes les sections, chaque compétence visée nommée, builds_on tiré de tes compétences, 10 jours ouvrés au plus",
+   "only index.html, only between job_pilot markers": "index.html seulement, et seulement entre les marqueurs job_pilot",
+   "no command other than EXAMINE / SEARCH / FETCH BODY.PEEK": "aucune commande autre que EXAMINE, SEARCH et FETCH BODY.PEEK",
+   "figures / technologies attributed to you exist in profile.yaml": "les chiffres et technologies qui te sont attribués existent dans profile.yaml",
+   "the follow-up draft adds no fact about you": "le brouillon de relance n'ajoute aucun fait te concernant",
+   "figures recomputed from the tables, never generated": "chiffres recalculés à partir des tables, jamais générés",
+   "Aggregate missing skills over 30 days and apply the 4 trigger rules.": "Ancienne version : regrouper les manques sur 30 jours et appliquer les 4 règles de déclenchement (remplacée par la v2, un projet par offre).",
+   "Design a realistic 1-2 week project brief from A to Z.": "Ancienne version : concevoir un brief de projet réaliste de 1 à 2 semaines (remplacée par la v2).",
+   "no target company with a greenhouse board in job_pilot.json": "aucune entreprise suivie avec un tableau Greenhouse dans job_pilot.json",
+   "no target company with a lever id in job_pilot.json": "aucune entreprise suivie avec un identifiant Lever dans job_pilot.json",
+   "public registry and Wikipedia APIs (no key)": "API publiques du registre et de Wikipédia (sans clé)",
+   "tectonic, poppler and model key present": "Tectonic, Poppler et clé du modèle présents",
+   "git present, token configured": "git présent, jeton configuré",
+   "mailbox configured (read-only)": "boîte mail configurée (lecture seule)",
+   "sources configured": "sources configurées",
+   "no external dependency": "aucune dépendance externe",
+   "Favourable offers only (not eliminated, experience keep/review, score >= min_score, 1-2 missing skills); a skill triggers when it is missing in >= min_offers of them and is covered neither by your profile nor by a brief. Computed by the program. Gaps listed on the home page.": "Ancienne version, remplacée par la v2 : tu peux la rejeter.",
+   "Objective, architecture, hardware and software, steps and milestones, success criteria, pitfalls, how to present it in an interview; builds on your skills (check BRIEF_STRUCTURE). Notified as an alert; the brief opens from the home page.": "Ancienne version, remplacée par la v2 : tu peux la rejeter.",
+   "enable_source": "activer une source"
   }
  },
  "skill_text": {
@@ -1103,5 +1183,97 @@
   "lannion",
   "vannes",
   "lorient"
- ]
+ ],
+ "ui_patterns": {
+  "fr": [
+   [
+    "^only:",
+    "seul : "
+   ],
+   [
+    "^daily\\b",
+    "quotidienne"
+   ],
+   [
+    "^rescore\\b",
+    "re-classement"
+   ],
+   [
+    "^inbox\\b",
+    "boîte mail"
+   ],
+   [
+    "^weekly\\b",
+    "hebdomadaire"
+   ],
+   [
+    "^application\\b",
+    "candidature"
+   ],
+   [
+    "^portfolio demo\\b",
+    "démo portfolio"
+   ],
+   [
+    "\\(scheduler\\)",
+    "(planificateur)"
+   ],
+   [
+    "\\(web\\)",
+    "(interface)"
+   ],
+   [
+    "(\\d+) agent\\(s\\) ran",
+    "\\1 agent(s) exécuté(s)"
+   ],
+   [
+    ", (\\d+) failed",
+    ", \\1 en échec"
+   ],
+   [
+    ", (\\d+) skipped",
+    ", \\1 sauté(s)"
+   ],
+   [
+    ", (\\d+) not run\\.",
+    ", \\1 non lancé(s)."
+   ],
+   [
+    "^([^:]*[^: ]): (\\d+) agent",
+    "\\1 : \\2 agent"
+   ],
+   [
+    "Offers: (\\d+) new, (\\d+) merged duplicates, (\\d+) already seen\\.",
+    "Offres : \\1 nouvelle(s), \\2 doublon(s) fusionné(s), \\3 déjà vue(s)."
+   ],
+   [
+    "Experience: (\\d+) kept, (\\d+) to review, (\\d+) rejected\\.",
+    "Expérience : \\1 gardée(s), \\2 à revoir, \\3 rejetée(s)."
+   ],
+   [
+    "since the start",
+    "depuis le début"
+   ],
+   [
+    "^took (\\d+) s$",
+    "a duré \\1 s"
+   ],
+   [
+    "^registry of (\\d+) agents valid, database and runs folder writable$",
+    "registre de \\1 agents valide, base et dossier des runs accessibles en écriture"
+   ],
+   [
+    "^(\\d+) answered application\\(s\\), (\\d+) needed before proposing new weights$",
+    "\\1 candidature(s) avec réponse, \\2 nécessaires avant de proposer de nouveaux poids"
+   ],
+   [
+    "France Travail full-text backfill \\(manual\\)",
+    "récupération du texte complet France Travail (manuelle)"
+   ],
+   [
+    "^daily \\+ ",
+    "quotidienne + "
+   ]
+  ]
+ }
 }

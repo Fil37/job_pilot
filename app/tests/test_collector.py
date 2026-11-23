@@ -1,4 +1,5 @@
 """agent002 — normalisation, salary, duplicates across aggregators, source journal, errors per source."""
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -171,6 +172,10 @@ def test_france_travail_pages_source_reads_only_allowed_pages(mobility=False):
             return 200, sm
         if url.endswith("croisements-metiers-departements.xml"):
             return 200, cross
+        if "/api-descriptifoffre/offre/" in url:
+            return 200, json.dumps({"descriptif": "Conception de cartes électroniques numériques, VHDL.",
+                                    "experienceProfil": {"experience": "Débutant accepté"},
+                                    "syntheseContrat": "CDI - Contrat travail", "salaire": "Annuel de 38000.0 Euros"})
         if url.endswith("/s13m6") or url.endswith("/s13m6d91"):
             return 200, ft_page({"id": "216" + url[-4:].upper().replace("/", "X"), "title": "Ingénieur électronicien (H/F)",
                                  "sub": "ACME - <span>91 - Orsay</span>", "desc": "Électronique embarquée..."},
@@ -191,6 +196,11 @@ def test_france_travail_pages_source_reads_only_allowed_pages(mobility=False):
     assert not any("boulanger" in u or "technico" in u for u in calls)
     titles = [t for (t,) in sqlite3.connect(orch.db_path).execute("SELECT title FROM offers")]
     assert titles == ["Ingénieur électronicien (H/F)"]
+    # FT_FULL_TEXT: the excerpt is replaced by the full text of the offer, with the experience asked and the salary
+    row = sqlite3.connect(orch.db_path).execute("SELECT description, description_complete, label_experience, salary_min "
+                                                "FROM offers").fetchone()
+    assert row[1] == 1 and "VHDL" in row[0] and row[2] == "Débutant accepté" and row[3] == 38000.0
+    assert sum("/api-descriptifoffre/offre/" in u for u in calls) == 1
     rhone = [i for i, u in enumerate(calls) if "rhone" in u]
     if mobility:                                      # FT_ALL_DEPARTMENTS: your zones first, then every other one
         assert rhone and rhone[0] > next(i for i, u in enumerate(calls) if u.endswith("d91"))

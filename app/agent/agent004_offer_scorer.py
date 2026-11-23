@@ -28,15 +28,15 @@ from app.agent import BaseAgent, RunContext, contains_term, envelope, fold, upse
 
 SKILLS = [
     {"skill_id": "SK_SCORE", "version": "1", "status": "proposed",
-     "objective": "Compute a score from skills, level, location, salary and sector.",
-     "summary": "Score = 100 x weighted sum of components in [0, 1] (weights of settings.json, versioned). "
-                "Eliminations: avoided sector, excluded keyword, contract not accepted, salary below your minimum, "
-                "outside your areas, experience rejected, each with its reason. Check SCORE_IS_WEIGHTED_SUM. "
-                "Shown on the home page and the offer page (Scoring)."},
+     "objective": "Calculer un score à partir des compétences, du niveau, du lieu, du salaire et du secteur.",
+     "summary": "Score = 100 x somme pondérée de composantes entre 0 et 1 (poids de settings.json, versionnés). "
+                "Éliminations : secteur évité, mot exclu, contrat refusé, salaire sous ton minimum, hors de France, "
+                "expérience rejetée, chacune avec sa raison. Une offre prometteuse connue par un extrait t'est "
+                "signalée. Contrôle SCORE_IS_WEIGHTED_SUM. Visible sur l'accueil et la page de l'offre."},
     {"skill_id": "SK_GAP_LIST", "version": "1", "status": "proposed",
-     "objective": "List the requirements met and the missing ones for each offer.",
-     "summary": "Skills detected in the offer (controlled lexicon) split into met (with your level) and missing. "
-                "The missing lists feed the 30-day gap analysis of agent007."},
+     "objective": "Lister pour chaque offre les exigences remplies et les manques.",
+     "summary": "Compétences repérées dans l'offre (lexique contrôlé), réparties entre remplies (avec ton niveau) et "
+                "manquantes. Les manques servent aux projets proposés par agent007."},
 ]
 
 AGENT_ID = "agent004"
@@ -167,10 +167,10 @@ class Agent(BaseAgent):
                 for i in range(0, len(ids), 100)] or [{"objective": "nothing new to score", "offer_ids": []}]
 
     def work(self, ctx: RunContext, subtasks):
-        ctx.store.register_check("SCORE_IS_WEIGHTED_SUM", AGENT_ID, "score = 100 x weighted sum of the components",
+        ctx.store.register_check("SCORE_IS_WEIGHTED_SUM", AGENT_ID, "score = 100 x somme pondérée des composantes",
                                  "rule of the method: every displayed figure is computed by the program")
-        ctx.store.register_check("FRANCE_POSITIVE", AGENT_ID, "a place counts as France only when recognised (French-only "
-                                 "source, département number, 'France', your zones, known French city)",
+        ctx.store.register_check("FRANCE_POSITIVE", AGENT_ID, "un lieu compte comme la France seulement s'il est reconnu (source uniquement française, numéro "
+     "de département, « France », tes zones, grande ville française)",
                                  "2026-11-23: Arbeitnow offers in Hamburg or Dortmund would have scored 'France'")
         prof = self._profile(ctx)
         profile = json.loads(prof["summary"])
@@ -188,7 +188,7 @@ class Agent(BaseAgent):
             for r in c.execute("SELECT kind, value FROM search_terms WHERE profile_hash=?", (prof["profile_hash"],)):
                 terms[r["kind"]].append(r["value"])
             counts = {"scored": 0, "eliminated": 0}
-            outcomes = []
+            outcomes, alerts = [], []
             for sub in subtasks:
                 for oid in sub["offer_ids"]:
                     o = dict(c.execute("SELECT * FROM offers WHERE offer_id=?", (oid,)).fetchone())
@@ -204,8 +204,18 @@ class Agent(BaseAgent):
                            "weights_version": scoring["weights_version"], "run_id": ctx.run_id, "scored_at": utc_now(), **s})
                     counts["scored"] += 1
                     counts["eliminated"] += int(s["eliminated"])
+                    # ASK_FULL_TEXT (your rule 2026-11-23: "si il y a une offre partielle j'irai moi-même chercher les
+                    # détails ... donc venir me voir"): a promising offer known by an excerpt only is brought to you once.
+                    if (o.get("description_complete") == 0 and not s["eliminated"] and decision in ("keep", "review")
+                            and s["score"] >= ctx.config["gaps"]["min_score"] and not c.execute(
+                                "SELECT 1 FROM alerts WHERE category='full_text' AND ref=?", (oid,)).fetchone()):
+                        alerts.append({"kind": "immediate", "category": "full_text", "ref": oid,
+                                       "message": f"Offre prometteuse ({s['score']:.0f}/100) mais incomplète : « {o['title'][:70]} »"
+                                                  f"{' chez ' + o['company'] if o.get('company') else ''}. Colle son texte "
+                                                  "complet sur sa page."})
         ctx.store.record_outcomes(ctx.run_id, outcomes)
-        return envelope(ctx, AGENT_ID, "succeeded", data=counts, metrics=counts)
+        counts["ask_full_text"] = len(alerts)
+        return envelope(ctx, AGENT_ID, "succeeded", data={**counts, "alerts": alerts}, metrics=counts)
 
 
 if __name__ == "__main__":

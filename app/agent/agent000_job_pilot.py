@@ -43,6 +43,15 @@ from app.agent import supervision as sv
 
 AGENT_ID = "agent000"
 # The ONLY modules the orchestrator may import (routes.json is checked against this list).
+CHAIN_FR = {"daily": "quotidienne", "rescore": "re-classement", "inbox": "boîte mail", "weekly": "hebdomadaire",
+            "application": "candidature", "portfolio": "portfolio"}
+
+
+def chain_label(name: str) -> str:
+    """French label of a chain name ('only:agent007' → 'seul : agent007')."""
+    return "seul : " + name[5:] if name.startswith("only:") else CHAIN_FR.get(name, name)
+
+
 ALLOWED_MODULES = {
     "agent001": "app.agent.agent001_profile_builder",
     "agent002": "app.agent.agent002_offer_collector",
@@ -163,8 +172,8 @@ class Orchestrator:
             c.execute("SELECT COUNT(*) FROM sup_runs").fetchone()
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         if not os.access(self.runs_dir, os.W_OK):
-            return "critical", "runs folder not writable"
-        return "healthy", f"registry of {len(self.registry.agents)} agents valid, database and runs folder writable"
+            return "critical", "dossier des runs non accessible en écriture"
+        return "healthy", f"registre de {len(self.registry.agents)} agents valide, base et dossier des runs accessibles en écriture"
 
     # ------------------------------------------------------------------ helpers
     def _ctx(self, run_id: str, task_id: str, previous: dict, params: dict | None = None,
@@ -249,7 +258,7 @@ class Orchestrator:
         if not members:
             raise ConfigError("give a chain or at least one agent")
         chain_name = chain or "only:" + ",".join(only)
-        run_id = self.store.new_run(title or f"{chain_name} {time.strftime('%Y-%m-%d %H:%M')}",
+        run_id = self.store.new_run(title or f"{chain_label(chain_name)} {time.strftime('%Y-%m-%d %H:%M')}",
                                     {"chain": chain_name, "only": only, "skip": skip, "params": params or {}})
         run_dir = self.runs_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -313,26 +322,27 @@ class Orchestrator:
         limits = []
         for a in members:
             if statuses.get(a) == "skipped":
-                limits.append(f"{a} not run (skipped): its checks were not performed")
+                limits.append(f"{a} non exécuté (sauté) : ses contrôles n'ont pas été faits")
         for p in (previous.get("agent002") or {}).get("data", {}).get("per_source", []):
             if p["status"] in ("disabled", "not_configured"):
-                limits.append(f"source {p['source_id']} not queried ({p['status']})")
+                limits.append(f"source {p['source_id']} non interrogée ({ {'disabled': 'désactivée', 'not_configured': 'non configurée'}.get(p['status'], p['status']) })")
         with db_connect(self.db_path) as c:
             q = [dict(r) for r in c.execute("SELECT check_id, outcome, COUNT(*) n FROM check_outcomes WHERE run_id=? "
                                             "GROUP BY check_id, outcome", (run_id,))]
         counts = {a: e["metrics"] for a, e in previous.items()}
-        summary = (f"{chain_name}: {len(ran)} agent(s) ran, {len(failed)} failed, "
-                   f"{sum(1 for s in statuses.values() if s == 'skipped')} skipped, "
-                   f"{sum(1 for s in statuses.values() if s == 'not_run')} not run.")
+        summary = (f"{chain_label(chain_name)} : {len(ran)} agent(s) exécuté(s), {len(failed)} en échec, "
+                   f"{sum(1 for s in statuses.values() if s == 'skipped')} sauté(s), "
+                   f"{sum(1 for s in statuses.values() if s == 'not_run')} non lancé(s).")
         if "agent002" in previous:
             d = previous["agent002"]["data"]
-            summary += f" Offers: {d.get('new', 0)} new, {d.get('merged', 0)} merged duplicates, {d.get('already_seen', 0)} already seen."
+            summary += (f" Offres : {d.get('new', 0)} nouvelle(s), {d.get('merged', 0)} doublon(s) fusionné(s), "
+                        f"{d.get('already_seen', 0)} déjà vue(s), {d.get('full_text', 0)} complétée(s).")
         if "agent003" in previous:
             d = previous["agent003"]["data"]
-            summary += f" Experience: {d.get('keep', 0)} kept, {d.get('review', 0)} to review, {d.get('reject', 0)} rejected."
+            summary += f" Expérience : {d.get('keep', 0)} gardée(s), {d.get('review', 0)} à revoir, {d.get('reject', 0)} rejetée(s)."
         next_steps = []
         if any("EXAMPLE" in w for w in warnings):
-            next_steps.append("Replace app/instance/profile.yaml with your real profile.")
+            next_steps.append("Remplace app/instance/profile.yaml par ton vrai profil.")
         if any("france_travail" in l for l in limits):
             next_steps.append("Add FT_CLIENT_ID / FT_CLIENT_SECRET (francetravail.io) to .env to query France Travail.")
         report = {"schema_version": SCHEMA_VERSION, "run_id": run_id, "chain": chain_name, "status": status,

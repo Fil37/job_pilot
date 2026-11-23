@@ -33,14 +33,15 @@ from app.agent.agent006_application_builder import ask_with_corrections, company
 
 SKILLS = [
     {"skill_id": "SK_INTERVIEW_SHEET", "version": "1", "status": "proposed",
-     "objective": "Prepare an interview sheet: offer and company summary, CV sent, likely questions, weak points, questions to ask.",
-     "summary": "Written after an interview or technical-test mail; figures and technologies attributed to you are "
-                "checked against your profile (SHEET_FACTS_FROM_PROFILE). A date found in the mail becomes a "
-                "calendar proposal (.ics) waiting for your approval. Sheet linked on the offer page."},
+     "objective": "Préparer une fiche d'entretien : résumé de l'offre et de l'entreprise, CV envoyé, questions probables, points faibles, questions à poser.",
+     "summary": "Écrite après un mail d'entretien ou de test technique ; les chiffres et technologies qui te sont "
+                "attribués sont vérifiés dans ton profil (SHEET_FACTS_FROM_PROFILE). Une date trouvée dans le mail "
+                "devient une proposition de rendez-vous (.ics) qui attend ta validation. Fiche liée depuis la page de "
+                "l'offre."},
     {"skill_id": "SK_FOLLOWUP_DRAFT", "version": "1", "status": "proposed",
-     "objective": "Propose a follow-up draft after 7-10 days without an answer.",
-     "summary": "Short polite draft in French, no new fact (FOLLOWUP_FACTS_FROM_PROFILE); you copy and send it "
-                "yourself. Shown on the offer page and as an approval on the Supervision page."},
+     "objective": "Proposer un brouillon de relance après 7 à 10 jours sans réponse.",
+     "summary": "Brouillon court et poli en français, sans fait nouveau (FOLLOWUP_FACTS_FROM_PROFILE) ; tu le copies "
+                "et l'envoies toi-même. Visible sur la page de l'offre et comme validation sur la page Supervision."},
 ]
 
 AGENT_ID = "agent010"
@@ -125,8 +126,8 @@ class Agent(BaseAgent):
         return a, o, json.loads(s[0]) if s else [], d[0] if d else "", cv, folder
 
     def work(self, ctx: RunContext, subtasks):
-        for cid, name in (("SHEET_FACTS_FROM_PROFILE", "figures / technologies attributed to you exist in profile.yaml"),
-                          ("FOLLOWUP_FACTS_FROM_PROFILE", "the follow-up draft adds no fact about you")):
+        for cid, name in (("SHEET_FACTS_FROM_PROFILE", "les chiffres et technologies qui te sont attribués existent dans profile.yaml"),
+                          ("FOLLOWUP_FACTS_FROM_PROFILE", "le brouillon de relance n'ajoute aucun fait te concernant")):
             ctx.store.register_check(cid, AGENT_ID, name, "rule of the user (no invented content)")
         p = Path(ctx.instance["profile_path"])
         profile = load_profile(p if p.is_absolute() else ROOT / p)

@@ -55,7 +55,7 @@ def test_skip_and_only_are_recorded():
         r = orch.run("daily", skip=["agent002"])
     t = tasks(orch, r["run_id"])
     assert t["agent002"] == "skipped" and t["agent003"] == "succeeded"
-    assert any("agent002 not run (skipped)" in lim for lim in r["limits"])
+    assert any("agent002 non exécuté (sauté)" in lim for lim in r["limits"])
 
 
 def test_critical_failure_stops_the_run():

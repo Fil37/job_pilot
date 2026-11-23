@@ -22,7 +22,7 @@ if __package__ in (None, ""):
 from flask import Flask
 
 from app.agent import APP_DIR, ConfigError
-from app.agent.agent000_job_pilot import Orchestrator
+from app.agent.agent000_job_pilot import Orchestrator, chain_label
 from app.web import page
 
 
@@ -62,7 +62,7 @@ def scheduler(orch: Orchestrator, stop: threading.Event) -> None:
             if orch.busy():
                 break
             try:
-                orch.run(chain, title=f"{chain} (scheduler)")
+                orch.run(chain, title=f"{chain_label(chain)} (planificateur)")
             except Exception as exc:  # noqa: BLE001 - logged; the scheduler keeps running
                 orch.store.log_event("error", "scheduler_failed", f"{chain}: {type(exc).__name__}: {exc}", agent_id="agent000")
             last[chain] = now.tm_yday if chain in ("daily", "weekly") else time.monotonic()

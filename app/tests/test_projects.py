@@ -241,7 +241,7 @@ def test_metrics_and_no_proposal_below_the_threshold():
     m = r["results"]["agent011"]
     snap = json.loads(sqlite3.connect(orch.db_path).execute("SELECT metrics FROM metrics_snapshots").fetchone()[0])
     assert snap["applications_sent"] == 2 and snap["answer_rate"] == 0.5 and snap["avg_days_to_first_answer"] == 3
-    assert snap["by_family"]["fpga"]["positive"] == 1 and "needed" in snap["weights_note"]
+    assert snap["by_family"]["fpga"]["positive"] == 1 and "nécessaires" in snap["weights_note"]
     assert not [a for a in orch.store.approvals() if a["action"] == "apply_scoring_weights"] and m["sent"] == 2
 
 

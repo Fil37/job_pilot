@@ -134,7 +134,7 @@
     "tos_status": "robots_allowed_pages",
     "checked_on": "2026-11-21",
     "max_requests": 200,
-    "rules": "CGU francetravail.fr: no clause against automated reading of offers (offers reusable through the API licence). robots.txt candidat.francetravail.fr: keyword search (*motsCles=*) forbidden, métier / département pages and offer pages allowed. Read: métier pages listed in the official sitemaps only, robots.txt checked before every request, 1 request/s, no login, no cookie.",
+    "rules": "CGU francetravail.fr: no clause against automated reading of offers (offers reusable through the API licence). robots.txt candidat.francetravail.fr: keyword search (*motsCles=*) forbidden, métier / département pages and offer pages allowed. Read: métier pages listed in the official sitemaps only, robots.txt checked before every request, 1 request/s, no login, no cookie. Full text (2026-11-23): the JSON the public offer page itself loads (/api-descriptifoffre/offre/<id>, allowed by robots.txt), at most detail_max_per_run offers per run, newest first, same 1 request/s.",
     "metier_must_contain_any": [
      "ingenieur",
      "developpeur",
@@ -143,7 +143,9 @@
     "metier_exclude": [
      "commercial"
     ],
-    "note": "Excerpts only (the full text is often on the partner site): offers without a clear requirement go to review."
+    "note": "Excerpts only (the full text is often on the partner site): offers without a clear requirement go to review.",
+    "read_full_text": true,
+    "detail_max_per_run": 250
    },
    "manual": {
     "enabled": true,

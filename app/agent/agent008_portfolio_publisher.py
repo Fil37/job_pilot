@@ -40,14 +40,15 @@ from app.agent import supervision as sv
 
 SKILLS = [
     {"skill_id": "SK_PORTFOLIO_RENDER", "version": "1", "status": "proposed",
-     "objective": "Render a separate demo of the portfolio entry, without publishing anything.",
-     "summary": "Clones your public portfolio (read-only), inserts the project card at the top of the grid between "
-                "job_pilot markers and serves the result locally (Open the demo, home page). Nothing is pushed."},
+     "objective": "Produire une démo séparée de l'entrée de portfolio, sans rien publier.",
+     "summary": "Clone ton portfolio public (lecture seule), insère la carte du projet en tête de la grille entre les "
+                "marqueurs job_pilot et sert le résultat en local (« Ouvrir la démo », accueil). Rien n'est envoyé."},
     {"skill_id": "SK_PORTFOLIO_PUBLISH", "version": "1", "status": "proposed",
-     "objective": "Publish an approved entry on the chosen date, for a limited time if asked.",
-     "summary": "Only after an approved publish_portfolio_entry (exact repository, file, dates); at publish_at the "
-                "card is pushed, at expire_at it is removed. Check PORTFOLIO_DIFF_SCOPE: index.html only, additions "
-                "only (removal: deletions only). Token read from .env by GIT_ASKPASS, never logged."},
+     "objective": "Publier une entrée approuvée à la date choisie, pour une durée limitée si demandé.",
+     "summary": "Seulement après une validation publish_portfolio_entry (dépôt, fichier et dates exacts) ; à "
+                "publish_at la carte est envoyée, à expire_at elle est retirée. Contrôle PORTFOLIO_DIFF_SCOPE : "
+                "index.html seulement, ajouts seulement (retrait : suppressions seulement). Jeton lu dans .env par "
+                "GIT_ASKPASS, jamais journalisé."},
 ]
 
 AGENT_ID = "agent008"
@@ -148,7 +149,7 @@ class Agent(BaseAgent):
                 [{"objective": "remove", "kind": "remove", "entry_id": e} for e in exp]) or [{"objective": "nothing due", "kind": None}]
 
     def work(self, ctx: RunContext, subtasks):
-        ctx.store.register_check("PORTFOLIO_DIFF_SCOPE", AGENT_ID, "only index.html, only between job_pilot markers",
+        ctx.store.register_check("PORTFOLIO_DIFF_SCOPE", AGENT_ID, "index.html seulement, et seulement entre les marqueurs job_pilot",
                                  "rule of the user: what goes outside is approved, nothing else changes")
         cfg = ctx.config["portfolio"]
         done, errors, outcomes = [], [], []
@@ -248,10 +249,10 @@ class Agent(BaseAgent):
 
     def healthcheck(self, ctx=None):
         if not shutil.which("git"):
-            return "critical", "git missing"
+            return "critical", "git absent"
         if ctx and not os.environ.get(ctx.config["portfolio"]["token_env"]):
-            return "degraded", "GITHUB_TOKEN missing in .env: demos work, publishing does not"
-        return "healthy", "git present, token configured"
+            return "degraded", "GITHUB_TOKEN absent du .env : les démos marchent, pas la publication"
+        return "healthy", "git présent, jeton configuré"
 
 
 if __name__ == "__main__":

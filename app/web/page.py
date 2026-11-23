@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from flask import abort, g, redirect, render_template, request, send_file, session, url_for
 
 from app.agent import db_connect, utc_now
+from app.agent.agent000_job_pilot import chain_label
 from app.agent import supervision as sv
 from app.agent.agent000_job_pilot import Orchestrator, application_params, build_digest
 
@@ -76,9 +77,18 @@ _run_lock = threading.Lock()
 def register(app, orch: Orchestrator) -> None:
     words = orch.schemas["words"]
     fr = {**words["ui_text"]["fr"], **words["skill_text"]["fr"]}
+    # Sentences generated with figures inside (run summaries, run titles of older runs, socle tiles): translated by
+    # the patterns of words.json, applied only when no exact translation exists.
+    patterns = [(re.compile(a), b) for a, b in words.get("ui_patterns", {}).get("fr", [])]
 
-    def translate(text: str) -> str:
-        return fr.get(text, text) if g.get("lang") == "fr" else text
+    def translate(text) -> str:
+        if g.get("lang") != "fr" or not isinstance(text, str) or not text:
+            return text
+        if text in fr:
+            return fr[text]
+        for rx, rep in patterns:
+            text = rx.sub(rep, text)
+        return text
 
     app.jinja_env.filters["fromjson"] = lambda v: json.loads(v) if v else {}
 
@@ -88,7 +98,7 @@ def register(app, orch: Orchestrator) -> None:
 
     @app.before_request
     def prepare():
-        g.lang = request.cookies.get("lang") if request.cookies.get("lang") in ("en", "fr") else "en"
+        g.lang = request.cookies.get("lang") if request.cookies.get("lang") in ("en", "fr") else "fr"   # French by default
         g.csp_nonce = secrets.token_urlsafe(16)
         if "csrf" not in session:
             session["csrf"] = secrets.token_urlsafe(24)
@@ -96,7 +106,7 @@ def register(app, orch: Orchestrator) -> None:
     @app.context_processor
     def inject():
         theme = request.cookies.get("theme")
-        return {"labels": {"app_title": "Job Pilot", "version": "v0.3", "css_file": "job_pilot_master.css"},
+        return {"labels": {"app_title": "Job Pilot", "version": "v0.4", "css_file": "job_pilot_master.css"},
                 "lang": g.lang, "theme": theme if theme in ("light", "dark") else "auto", "_": translate,
                 "csrf": session.get("csrf"), "csp_nonce": g.csp_nonce, "error": None,
                 "reasons": words["experience_reasons"], "elim": words["elimination_reasons"]}
@@ -189,7 +199,7 @@ def register(app, orch: Orchestrator) -> None:
 
         def work():
             try:
-                orch.run("portfolio", params={"agent008": {"brief_id": brief_id}}, title=f"portfolio demo {brief_id} (web)")
+                orch.run("portfolio", params={"agent008": {"brief_id": brief_id}}, title=f"démo portfolio {brief_id} (interface)")
             finally:
                 _run_lock.release()
         threading.Thread(target=work, daemon=True, name=f"demo-{brief_id}").start()
@@ -242,7 +252,7 @@ def register(app, orch: Orchestrator) -> None:
 
         def work():
             try:
-                orch.run(chain, title=f"{chain} (web)")
+                orch.run(chain, title=f"{chain_label(chain)} (interface)")
             finally:
                 _run_lock.release()
 
@@ -331,6 +341,33 @@ def register(app, orch: Orchestrator) -> None:
         orch.store.log_event("info", "user_decision", f"{offer_id}: {choice}", agent_id="user")
         return redirect(url_for("offer", offer_id=offer_id))
 
+    @app.post("/offers/<offer_id>/full_text")
+    def offer_full_text(offer_id: str):
+        """ASK_FULL_TEXT: you paste the whole offer copied from its site; it replaces the excerpt (traced as an event)
+        and the offer is judged again (experience, score); a decision you took on it is kept."""
+        check_csrf()
+        text = (request.form.get("text") or "").replace("\r\n", "\n").strip()
+        if not 200 <= len(text) <= 60000:
+            abort(400)
+        from app.agent.agent002_offer_collector import reset_judgement
+        with db_connect(orch.db_path) as c:
+            cur = c.execute("UPDATE offers SET description=?, description_complete=1 WHERE offer_id=?", (text, offer_id))
+            if cur.rowcount == 0:
+                abort(404)
+            reset_judgement(c, offer_id)
+            c.execute("UPDATE alerts SET seen_at=? WHERE category='full_text' AND ref=? AND seen_at IS NULL",
+                      (utc_now(), offer_id))
+        orch.store.log_event("info", "user_full_text", f"{offer_id}: full text pasted ({len(text)} characters)",
+                             agent_id="user")
+        if not orch.busy() and _run_lock.acquire(blocking=False):
+            def work():
+                try:
+                    orch.run("rescore", title=f"re-classement {offer_id} (texte complet collé)")
+                finally:
+                    _run_lock.release()
+            threading.Thread(target=work, daemon=True, name=f"rescore-{offer_id}").start()
+        return redirect(url_for("offer", offer_id=offer_id, msg="Full text saved: the offer is judged again."))
+
     # ------------------------------------------------------------------ applications (agent006): nothing is sent
     @app.post("/offers/<offer_id>/application")
     def start_application(offer_id: str):
@@ -345,7 +382,7 @@ def register(app, orch: Orchestrator) -> None:
         def work():
             try:
                 orch.run("application", params=application_params(offer_id, letter),
-                         title=f"application {offer_id} (web)")
+                         title=f"candidature {offer_id} (interface)")
             finally:
                 _run_lock.release()
 

@@ -96,7 +96,7 @@
     <div class="panel-title"><h2>{{ _('Scoring') }}</h2>{% if s %}<span class="chip">{{ s.weights_version }}</span>{% endif %}</div>
     {% if s %}
     <table><thead><tr><th>{{ _('Components') }}</th><th>{{ _('Value') }}</th><th>{{ _('Weight') }}</th><th></th></tr></thead>
-      <tbody>{% for k, w in s.components.weights.items() %}<tr><td>{{ _(k) }}</td><td>{{ '%.2f'|format(s.components['values'][k]) }}</td><td>{{ w }}</td><td class="small faint">{{ s.components.notes.get(k, '') }}</td></tr>{% endfor %}</tbody></table>
+      <tbody>{% for k, w in s.components.weights.items() %}<tr><td>{{ _(k) }}</td><td>{{ '%.2f'|format(s.components['values'][k]) }}</td><td>{{ w }}</td><td class="small faint">{{ _(s.components.notes.get(k, '')) }}</td></tr>{% endfor %}</tbody></table>
     <p class="small mt-12"><strong>{{ _('Matched') }}</strong> : {% for m in s.matched %}<span class="chip">{{ m.skill }} ({{ _(m.level) }})</span>{% else %}{{ _('none') }}{% endfor %}</p>
     <p class="small"><strong>{{ _('Missing') }}</strong> : {% for m in s.missing %}<span class="chip">{{ m }}</span>{% else %}{{ _('none') }}{% endfor %}</p>
     {% if s.eliminated %}<p class="alert">{{ _('Eliminated') }} : {% for e in s.elimination_reasons %}{{ _(elim.get(e, e)) }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
@@ -144,6 +144,18 @@
     <div class="panel-title"><h2>{{ _('Description') }}</h2></div>
     <div class="scroll-box tall"><p class="small pre-line">{{ o.description }}</p></div>
   </section>
+  {% if o.description_complete == 0 %}
+  <section class="panel" id="full-text">
+    <div class="panel-title"><h2>{{ _('Paste the full text') }}</h2><span class="badge partial">{{ _('full_text') }}</span></div>
+    <p class="small">{{ _('Only an excerpt of this offer is known. Copy the whole offer from its site and paste it here: it will be judged again on the full text.') }}</p>
+    <p><a class="button ghost small" href="{{ o.url }}" rel="noopener noreferrer" target="_blank">↗ {{ _('Open the offer on its site') }}</a></p>
+    <form method="post" action="{{ url_for('offer_full_text', offer_id=o.offer_id) }}" class="mt-12">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <textarea name="text" rows="12" required minlength="200" maxlength="60000"></textarea>
+      <p class="mt-12"><button type="submit" class="small"{% if busy %} disabled{% endif %}>{{ _('Paste the full text') }}</button></p>
+    </form>
+  </section>
+  {% endif %}
 
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Seen on') }} <span class="count">{{ aliases|length }}</span></h2>{% if run %}<span class="chip">{{ _('First seen in run') }} {{ run.run_id }}</span>{% endif %}</div>
