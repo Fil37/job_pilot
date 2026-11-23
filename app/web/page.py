@@ -630,8 +630,16 @@ def register(app, orch: Orchestrator) -> None:
         files = []
         if kind == "package":
             files = [f for f in ("cv.pdf", "letter.pdf") if (path.parent / f).is_file()]
+        offer = None
+        if row[1]:
+            with db_connect(orch.db_path) as c:
+                o = c.execute("SELECT offer_id, title, company, location, url FROM offers WHERE offer_id=?", (row[1],)).fetchone()
+            if o:
+                offer = dict(o)
+                if not re.match(r"https?://", offer.get("url") or ""):     # a link to the offer's site: http(s) only
+                    offer["url"] = None
         doc = {"kind": kind, "ref": ref, "title": title or path.name, "sections": sections, "files": files,
-               "offer_id": row[1], "when": path.stat().st_mtime}
+               "offer_id": row[1], "offer": offer, "when": path.stat().st_mtime}
         return render_template("job_pilot_page.html", doc=doc)
 
     # ------------------------------------------------------------------ supervision

@@ -294,5 +294,24 @@ def test_project_done_sheet_makes_the_card():
     assert sqlite3.connect(orch.db_path).execute("SELECT COUNT(*) FROM events WHERE code='user_project_done'").fetchone()[0] == 1
 
 
+def test_the_project_page_links_its_offer():
+    """Request of the user 2026-11-23: next to the offer a project was proposed for, a link to it (its page in
+    job_pilot and the ad on its site, http(s) only)."""
+    orch, cl = client()
+    c = sqlite3.connect(orch.db_path)
+    oid, url = c.execute("SELECT offer_id, url FROM offers").fetchone()
+    folder = orch.runs_dir / "r_l"
+    folder.mkdir(parents=True)
+    (folder / "b.md").write_text("# Projet\n\n## Objectif\n\nx\n")
+    with c:
+        c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at, offer_id) "
+                  "VALUES ('b_l','kafka','Projet','{}',?,'proposed','r_l','2026-11-23',?)", (str(folder / "b.md"), oid))
+    page = cl.get("/docs/brief/b_l").data.decode()
+    assert f'href="/offers/{oid}"' in page and f'href="{url}"' in page and "Voir l&#39;annonce" in page
+    with c:
+        c.execute("UPDATE offers SET url='javascript:alert(1)'")
+    assert "javascript:" not in cl.get("/docs/brief/b_l").data.decode()
+
+
 if __name__ == "__main__":
     run_main(globals())

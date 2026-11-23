@@ -991,7 +991,9 @@
    "points": "points",
    "score of the offer": "score de l'offre",
    "Estimation: the project skills counted at the working level, once the project is done and added to your profile.": "Estimation : les compétences du projet comptées au niveau « pratique », une fois le projet réalisé et ajouté à ton profil.",
-   "Still missing after the project:": "Encore manquantes après le projet :"
+   "Still missing after the project:": "Encore manquantes après le projet :",
+   "Target offer": "Offre visée",
+   "See the job ad": "Voir l'annonce"
   }
  },
  "skill_text": {

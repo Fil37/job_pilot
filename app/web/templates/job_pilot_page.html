@@ -31,6 +31,9 @@
     <div>
       <p class="crumbs"><a href="{{ url_for('home') }}">← {{ _('Home') }}</a>{% if doc.offer_id %} · <a href="{{ url_for('offer', offer_id=doc.offer_id) }}">{{ _('Offer') }}</a>{% endif %} · {{ _({'package': 'Application package', 'brief': 'Project idea', 'sheet': 'Interview sheet'}[doc.kind]) }}</p>
       <h1 class="title-clamp">{{ doc.title }}</h1>
+      {% if doc.offer %}<p class="chips mt-12"><span class="chip">{{ _('Target offer') }}</span>
+        <a href="{{ url_for('offer', offer_id=doc.offer.offer_id) }}"><strong>{{ doc.offer.title }}</strong>{% if doc.offer.company %} · {{ doc.offer.company }}{% endif %}{% if doc.offer.location %} · {{ doc.offer.location }}{% endif %}</a>
+        {% if doc.offer.url %}<a class="button ghost small" href="{{ doc.offer.url }}" target="_blank" rel="noopener noreferrer">↗ {{ _('See the job ad') }}</a>{% endif %}</p>{% endif %}
     </div>
     <div class="head-actions">
       {% if doc.kind == 'brief' and not doc.edit and not doc.done %}<a class="button small" href="{{ url_for('brief_edit', brief_id=doc.ref) }}">✎ {{ _('Edit the project') }}</a>
