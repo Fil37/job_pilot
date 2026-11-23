@@ -131,3 +131,22 @@ Quand une offre écrit « VHDL ou Verilog », « VHDL et/ou Verilog » ou « VHD
 l'autre n'est pas comptée manquante (le score l'indique : « vhdl accepté à la place de verilog »). Seuls des outils
 interchangeables comptent (groupes de `skill_alternative_groups` dans words.json : langages HDL, CAO de cartes...).
 
+## Modularité (2026-11-23)
+
+- **Un agent n'importe jamais un autre agent.** Les outils partagés sont dans `app/agent/common_*.py` :
+  `common_llm` (appel au modèle avec corrections), `common_profile` (profil, faits, tes compétences : une seule
+  définition), `common_http` (client HTTP borné, robots.txt), `common_text` (intitulés, formes juridiques),
+  `common_company` (fiches entreprise), `common_scoring` (score, compétences au choix, gain d'un projet),
+  `common_projects` (date réelle, image, grille du portfolio, matériel).
+- **Une source par fichier** : `source_base` (format commun d'une offre), `source_france_travail`, `source_ats`
+  (Greenhouse, Lever), `source_arbeitnow`. Ajouter une source ne touche aucune autre.
+- **L'interface ne modifie aucune table elle-même** : chaque action (ta décision sur une offre, un texte collé, un
+  projet modifié, une fiche « Projet réalisé », une demande de publication...) est faite par l'agent propriétaire
+  des données, via `agent000.act`. Les actions permises sont déclarées dans `routes.json` (`user_actions`) et tracées.
+- **Quand le texte d'une offre change**, agent002 l'horodate (`text_updated_at`) ; agent003 et agent004 la rejugent
+  d'eux-mêmes, sans jamais effacer une décision que tu as prise.
+- **Tests de garde** (`app/tests/test_modularity.py`) : aucun import entre agents, l'interface ne parle qu'à
+  l'orchestrateur et aux modules communs, chaque table n'est écrite que par son propriétaire (ou un co-écrivain
+  déclaré dans `rows.json` sur ses champs : agent009 fait avancer le statut d'une candidature d'après tes mails),
+  actions déclarées = actions codées.
+

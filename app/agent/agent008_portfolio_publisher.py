@@ -32,10 +32,11 @@ import stat
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-from app.agent import BaseAgent, RunContext, db_connect, decode_row, envelope, fold, sha, upsert, utc_now
+from app.agent.common_projects import (parse_done_on, IMAGE_TYPES, image_problem, grid_span, grid_titles)  # noqa: F401 - shared, see common_projects.py
+from app.agent import NotFound, BaseAgent, RunContext, db_connect, decode_row, envelope, fold, sha, upsert, utc_now
 from app.agent import supervision as sv
 
 SKILLS = [
@@ -59,22 +60,6 @@ def slugify(text: str) -> str:
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", fold(text))).strip("-")[:60].strip("-") or "projet"
 
 
-def parse_done_on(text: str | None, today=None) -> str:
-    """REAL_PROJECT_DATE (rule of the user 2026-11-23: "des projets que j'ai déjà faits mais pas encore versionnés ne
-    doivent pas apparaître avec la date d'aujourd'hui"): the date YOU give for when the project was really done,
-    AAAA, AAAA-MM or AAAA-MM-JJ, never in the future. Raises ValueError otherwise."""
-    t = (text or "").strip()
-    m = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", t)
-    if not m:
-        raise ValueError("format AAAA, AAAA-MM ou AAAA-MM-JJ")
-    y, mo, d = int(m.group(1)), int(m.group(2) or 1), int(m.group(3) or 1)
-    when = datetime(y, mo, d)                     # ValueError for an impossible month or day
-    today = today or datetime.now()
-    if when > today or y < 1990:
-        raise ValueError("date dans le futur ou trop ancienne")
-    return t
-
-
 def card_year(brief: dict) -> int | None:
     """Year shown on the card: the year of YOUR date of realisation, never today's (REAL_PROJECT_DATE)."""
     try:
@@ -85,24 +70,6 @@ def card_year(brief: dict) -> int | None:
 
 CARD_FIELDS = ("short_name", "domain", "context", "title", "summary", "details_title", "details", "tags", "link_url",
                "link_label", "image_alt", "categories", "position", "figures", "image_file")
-IMAGE_TYPES = {".png": b"\x89PNG", ".jpg": b"\xff\xd8", ".jpeg": b"\xff\xd8", ".webp": b"RIFF", ".svg": None}
-
-
-def image_problem(name: str, data: bytes, max_bytes: int) -> str | None:
-    """IMAGE_SAFE: an image you add to your PUBLIC site: known type, real content, size limit, no script in an SVG."""
-    ext = Path(name or "").suffix.lower()
-    if ext not in IMAGE_TYPES:
-        return "type d'image refusé (png, jpg, webp ou svg)"
-    if not data or len(data) > max_bytes:
-        return f"image vide ou trop lourde (au plus {max_bytes // 1000} ko)"
-    magic = IMAGE_TYPES[ext]
-    if magic and not data.startswith(magic):
-        return "le contenu ne correspond pas à l'extension"
-    if ext == ".svg":
-        t = data.decode("utf-8", "replace").lower()
-        if "<svg" not in t or re.search(r"<script|<foreignobject|\son\w+\s*=|javascript:|href\s*=\s*[\"']https?:", t):
-            return "SVG refusé : script, gestionnaire d'événement ou lien externe"
-    return None
 
 
 def card_html(card: dict, slug: str, year: int | None, image_src: str | None = None) -> str:
@@ -136,35 +103,6 @@ def card_html(card: dict, slug: str, year: int | None, image_src: str | None = N
         parts.append(f'      <p style="margin-top:14px"><span class="link">{e(card["link_label"])}</span></p>')
     parts += ["    </div>", "  </article>"]
     return f"<!-- job_pilot:begin {slug} -->\n" + "\n".join(parts) + f"\n<!-- job_pilot:end {slug} -->\n"
-
-
-def grid_span(page: str, grid_marker: str) -> tuple[int, int, list[tuple[str, int]]]:
-    """(start after the marker, end at the grid's closing </div>, [(card title, end of its </article>)...])."""
-    i = page.find(grid_marker)
-    if i < 0:
-        raise ValueError("project grid not found in the portfolio page")
-    j = pos = i + len(grid_marker)
-    depth, cards, title = 1, [], None
-    for m in re.finditer(r"<div\b|</div>|<h3>(.*?)</h3>|</article>", page[j:], re.S):
-        tok = m.group(0)
-        if tok.startswith("<div"):
-            depth += 1
-        elif tok == "</div>":
-            depth -= 1
-            if depth == 0:
-                return j, j + m.start(), cards
-        elif tok.startswith("<h3>"):
-            title = html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
-        elif tok == "</article>" and depth == 1:
-            cards.append((title or "", j + m.end()))
-            title = None
-        pos = j + m.end()
-    raise ValueError("project grid not closed in the portfolio page")
-
-
-def grid_titles(page: str, grid_marker: str) -> list[str]:
-    """Titles of the cards of the grid, in order (to choose where your card goes)."""
-    return [t for t, _ in grid_span(page, grid_marker)[2]]
 
 
 def insert_card(page: str, slug: str, card: str, grid_marker: str, position: str = "first") -> str:
@@ -391,6 +329,31 @@ class Agent(BaseAgent):
         if ctx and not os.environ.get(ctx.config["portfolio"]["token_env"]):
             return "degraded", "GITHUB_TOKEN absent du .env : les démos marchent, pas la publication"
         return "healthy", "git présent, jeton configuré"
+
+
+# =========================================================================== USER_ACTIONS (called by agent000.act)
+def action_request_publication(orch, *, entry_id: str, publish_at: str, expire_at: str | None = None,
+                               done_on: str | None = None) -> dict:
+    """You ask for a publication: only an approval request is created (approved on the Supervision page)."""
+    try:
+        pub = datetime.fromisoformat(publish_at or "")
+        exp = datetime.fromisoformat(expire_at) if expire_at else None
+    except ValueError:
+        raise ValueError("Invalid date.") from None
+    if exp and exp <= pub:
+        raise ValueError("Invalid date.")
+    cfg = orch.config["portfolio"]
+    with db_connect(orch.db_path) as c:
+        row = c.execute("SELECT slug FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
+    if not row:
+        raise NotFound(entry_id)
+    orch.store.request_approval("publish_portfolio_entry", entry_id, {
+        "repo": cfg["repo"], "file": cfg["file"], "slug": row[0], "publish_at": pub.isoformat(timespec="minutes"),
+        "expire_at": exp.isoformat(timespec="minutes") if exp else None, "done_on": done_on})
+    return {"event": "user_publication_request", "detail": f"{entry_id}: {pub.isoformat(timespec='minutes')}"}
+
+
+ACTIONS = {"request_publication": action_request_publication}
 
 
 if __name__ == "__main__":

@@ -24,8 +24,8 @@ import re
 import sys
 from pathlib import Path
 
-import yaml
 
+from app.agent.common_profile import (NUMBER, numbers, load_profile)  # noqa: F401 - shared, see common_profile.py
 from app.agent import (ROOT, BaseAgent, RunContext, contains_term, envelope, fold, month_index, sha, upsert,
                        utc_now)
 
@@ -46,24 +46,6 @@ SKILLS = [
 AGENT_ID = "agent001"
 KINDS = ("internship", "apprenticeship", "job", "freelance")
 LEVELS = ("core", "working", "notions")
-# PROFILE_FIGURES_STANDALONE (real case 2026-11-21, your CV): numbers glued to a name are not figures
-# ("i.MX93", "LPC55S69", "CRC-8", "INT8", "DE0-Nano") and "1 632 W" / "4 885" are ONE number each.
-NUMBER = re.compile(r"(?<![A-Za-z0-9.\-])\d{1,3}(?:[ \u202f\u00a0]\d{3})+(?:[.,]\d+)?(?![A-Za-z0-9])"
-                    r"|(?<![A-Za-z0-9.\-])\d+(?:[.,]\d+)?(?![A-Za-z0-9])")
-
-
-def numbers(text: str) -> set[str]:
-    return {re.sub(r"[ \u202f\u00a0]", "", n).replace(",", ".") for n in NUMBER.findall(text.replace("**", ""))}
-
-
-def load_profile(path: Path) -> dict:
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
-        raise ValueError(f"profile file unreadable: {exc}") from exc
-    if not isinstance(data, dict):
-        raise ValueError("profile file must be a mapping")
-    return data
 
 
 def all_bullets(profile: dict):

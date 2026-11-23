@@ -38,7 +38,7 @@ if __package__ in (None, ""):  # launched as a script: make the project root imp
 
 from app.agent import (DB_PATH, INSTANCE_DIR, INSTANCE_JSON, RUNS_DIR, SCHEMA_VERSION, ConfigError, RunContext,
                        db_connect, ensure_business_tables, envelope, load_instance, load_schemas, merge_config,
-                       secrets_in_env, upsert, utc_now, validate_envelope)
+                       secrets_in_env, upsert, utc_now)
 from app.agent import supervision as sv
 
 AGENT_ID = "agent000"
@@ -147,6 +147,7 @@ class Orchestrator:
                 continue
             self.store.register_skills(aid, [{k: sk[k] for k in SKILL_FIELDS} for sk in mod.SKILLS])
         self.store.propose_skill_activations(only_new=True)
+        problems += self.check_actions()             # USER_ACTIONS declared = implemented
         checks = {}
         for aid in self.registry.agents:
             agent = self.registry.instance(aid)
@@ -206,6 +207,33 @@ class Orchestrator:
                     subprocess.run([exe, "job_pilot", a["message"][:200]], timeout=5, check=False)
                 except (OSError, subprocess.SubprocessError):
                     pass
+
+    # ------------------------------------------------------------------ USER_ACTIONS
+    def act(self, agent_id: str, action: str, **params) -> dict:
+        """USER_ACTIONS (modularity, 2026-11-23): what you do in the interface (your decision on an offer, a pasted full
+        text, an edited project...) is done by the agent that OWNS the data, never by the web pages. Only actions
+        declared in routes.json 'user_actions' AND in the module's ACTIONS run; each one is traced as an event.
+        Raises ValueError (refused, message for you) or NotFound (unknown target)."""
+        if action not in (self.schemas["routes"].get("user_actions") or {}).get(agent_id, []):
+            raise ValueError(f"action {agent_id}.{action} not declared in routes.json")
+        fn = (USER_ACTIONS if agent_id == AGENT_ID else getattr(self.registry.module(agent_id), "ACTIONS", {})).get(action)
+        if fn is None:
+            raise ValueError(f"action {agent_id}.{action} not implemented")
+        result = fn(self, **params) or {}
+        self.store.log_event("info", result.pop("event", f"user_{action}"), result.pop("detail", f"{agent_id}.{action}"),
+                             agent_id="user")
+        return result
+
+    def check_actions(self) -> list[str]:
+        """Startup check: every declared action exists, every implemented action is declared."""
+        declared = self.schemas["routes"].get("user_actions") or {}
+        problems = []
+        for aid in [AGENT_ID, *self.registry.agents]:
+            impl = set(USER_ACTIONS if aid == AGENT_ID else getattr(self.registry.module(aid), "ACTIONS", {}))
+            decl = set(declared.get(aid, []))
+            problems += [f"{aid}.{a}: declared in routes.json but not implemented" for a in sorted(decl - impl)]
+            problems += [f"{aid}.{a}: implemented but not declared in routes.json" for a in sorted(impl - decl)]
+        return problems
 
     def busy(self) -> list[str]:
         return sv.busy_runs(self.db_path)
@@ -407,6 +435,21 @@ def application_params(offer_id: str, letter: bool = False) -> dict:
     """APPLICATION_PARAMS (case 2026-11-21: only agent006 received the offer, agent005 researched the top of the
     day instead of the offer's company): every agent of the application chain gets the offer."""
     return {"agent005": {"offer_id": offer_id}, "agent006": {"offer_id": offer_id, "letter": letter}}
+
+
+def action_mark_alerts_seen(orch, *, alert_id: int | None = None, category: str | None = None, ref: str | None = None):
+    """agent000 owns the alerts: one alert, or every unseen alert of a category and a target."""
+    with db_connect(orch.db_path) as c:
+        if alert_id is not None:
+            c.execute("UPDATE alerts SET seen_at=? WHERE alert_id=? AND seen_at IS NULL", (utc_now(), int(alert_id)))
+        elif category and ref:
+            c.execute("UPDATE alerts SET seen_at=? WHERE category=? AND ref=? AND seen_at IS NULL", (utc_now(), category, ref))
+        else:
+            raise ValueError("an alert id, or a category and a target, is required")
+    return {"event": "alert_seen", "detail": f"{alert_id or f'{category}:{ref}'}"}
+
+
+USER_ACTIONS = {"mark_alerts_seen": action_mark_alerts_seen}
 
 
 def run_standalone(agent_id: str) -> int:

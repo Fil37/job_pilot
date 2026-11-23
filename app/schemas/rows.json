@@ -69,7 +69,7 @@
    }
   },
   "offer_inbox": {
-   "owner": "web",
+   "owner": "agent002",
    "description": "Offers pasted by the user in the interface (source 'manual'); read by agent002 which marks them imported.",
    "primary_key": [
     "inbox_id"
@@ -273,6 +273,10 @@
      "type": "bool",
      "required": false,
      "description": "false when only an excerpt is available (France Travail listing pages); NULL = complete"
+    },
+    "text_updated_at": {
+     "type": "text",
+     "required": false
     }
    }
   },
@@ -542,6 +546,12 @@
      "type": "text",
      "required": false
     }
+   },
+   "co_writers": {
+    "agent009": [
+     "status"
+    ],
+    "_doc": "agent009 moves an application's status forward from your mails (interview, rejection...); nothing else."
    }
   },
   "companies": {

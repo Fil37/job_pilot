@@ -236,6 +236,11 @@ def decode_row(rows: dict, table: str, row: sqlite3.Row | dict) -> dict:
     return out
 
 
+class NotFound(Exception):
+    """USER_ACTIONS: the target of an action does not exist (shown as 404). Not a LookupError on purpose: a KeyError in
+    an action is a bug and must not look like 'not found' (real case 2026-11-23)."""
+
+
 # =========================================================================== run context and results
 @dataclass
 class RunContext:

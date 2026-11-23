@@ -39,11 +39,13 @@ from pathlib import Path
 
 import jinja2
 
-from app.agent import (ROOT, BaseAgent, RunContext, contains_term, decode_row, envelope, fold, make_llm, sha, upsert,
+from app.agent.common_llm import (FRENCH_STYLE, no_em_dash, ask_with_corrections)  # noqa: F401 - shared, see common_llm.py
+from app.agent.common_profile import (load_profile, own_skills, plain, profile_corpus, fact_problems, novel_words)  # noqa: F401 - shared, see common_profile.py
+from app.agent.common_company import (company_lines)  # noqa: F401 - shared, see common_company.py
+from app.agent import (NotFound, ROOT, BaseAgent, RunContext, db_connect, contains_term, decode_row, envelope, fold, make_llm, sha, upsert,
                        utc_now)
 from app.agent import supervision as sv
-from app.agent.agent001_profile_builder import load_profile, numbers
-from app.agent.agent004_offer_scorer import gain_lines, offer_skills, project_gain
+from app.agent.common_scoring import gain_lines, offer_skills, project_gain
 
 SKILLS = [
     {"skill_id": "SK_CV_TAILOR", "version": "1", "status": "proposed",
@@ -100,52 +102,6 @@ def tex(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", out)
 
 
-def plain(text: str) -> str:
-    return str(text or "").replace("**", "")
-
-
-def profile_corpus(profile: dict) -> str:
-    """Every text of the profile: the only allowed source of figures and technologies."""
-    parts = []
-
-    def walk(v):
-        if isinstance(v, dict):
-            for x in v.values():
-                walk(x)
-        elif isinstance(v, list):
-            for x in v:
-                walk(x)
-        elif isinstance(v, (str, int, float)):
-            parts.append(str(v))
-    walk({k: v for k, v in profile.items() if k != "identity"})
-    ident = profile.get("identity", {})
-    parts += ident.get("headline_variants", []) + ident.get("tagline_variants", [])
-    return plain(" \n ".join(parts))
-
-
-def fact_problems(text: str, corpus: str, lexicon: dict) -> list[str]:
-    """CV_FACTS_FROM_PROFILE: numbers and lexicon technologies of `text` that are absent from the profile corpus."""
-    problems = []
-    extra = sorted(numbers(text) - numbers(corpus))
-    if extra:
-        problems.append(f"figures not in the profile: {extra}")
-    ft, fc = fold(plain(text)), fold(corpus)
-    techs = sorted(k for k, terms in lexicon.items()
-                   if any(contains_term(ft, t) for t in terms) and not any(contains_term(fc, t) for t in terms + [k]))
-    if techs:
-        problems.append(f"technologies not in the profile: {techs}")
-    return problems
-
-
-def novel_words(text: str, corpus: str) -> list[str]:
-    """SUMMARY_WORDS_FROM_PROFILE (real case 2026-11-21, Alice & Bob CV: the model added "avec un souci de robustesse
-    et de maintenabilité", a claim absent from your profile): every meaningful word (7+ letters) of a model text must
-    exist in the profile (singular / plural ignored)."""
-    def bag(t):
-        return {w.rstrip("s") for w in re.findall(r"[a-z]{7,}", fold(plain(t)))}
-    return sorted(bag(text) - bag(corpus))
-
-
 def relevance(skills: list[str], req: set[str]) -> int:
     return sum(1 for s in skills if s in req)
 
@@ -189,44 +145,6 @@ Rules: 3 paragraphs, 220 to 320 words in total, formal French ("vous"). Use ONLY
 new number, no technology or experience that is not listed). Paragraph 1: why this offer and company (from the offer
 text only); 2: matching experiences and projects; 3: availability and wish for an interview. No greeting, no closing.
 """
-
-
-FRENCH_STYLE = (" Write natural French typography: never use the long dash (—, –) nor English punctuation habits; "
-                "use commas, colons or parentheses instead.")
-
-
-def no_em_dash(value):
-    """NO_EM_DASH (user request 2026-11-21: no English-style long dashes): the program fixes model texts itself."""
-    if isinstance(value, str):
-        v = value.replace(" — ", ", ").replace(" – ", ", ").replace("—", ", ").replace("–", "-")
-        return v.replace(", ,", ",").replace(" ,", ",")
-    if isinstance(value, list):
-        return [no_em_dash(v) for v in value]
-    if isinstance(value, dict):
-        return {k: no_em_dash(v) for k, v in value.items()}
-    return value
-
-
-def ask_with_corrections(client, system: str, payload: dict, check, *, purpose: str, ctx: RunContext,
-                         max_corrections: int) -> tuple[dict | None, list[str], int]:
-    """One call + at most `max_corrections` re-sends naming the defect and the expected correction. Returns
-    (answer or None, last problems, number of corrections)."""
-    messages = [{"role": "system", "content": system + FRENCH_STYLE},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
-    problems: list[str] = []
-    for attempt in range(max_corrections + 1):
-        try:
-            ans = client.chat_json(messages, purpose=purpose, run_id=ctx.run_id, task_id=ctx.task_id)
-        except sv.LLMError as exc:
-            return None, [f"model unavailable: {exc.category}"], attempt
-        ans = no_em_dash(ans)
-        problems = check(ans)
-        if not problems:
-            return ans, [], attempt
-        messages += [{"role": "assistant", "content": json.dumps(ans, ensure_ascii=False)},
-                     {"role": "user", "content": "Defects: " + "; ".join(problems) + ". Correct them: remove anything "
-                      "absent from the candidate data and keep only the allowed values. Answer the full JSON again."}]
-    return None, problems, max_corrections
 
 
 # =========================================================================== LaTeX
@@ -282,7 +200,7 @@ def cv_offer_match(cv_text: str, req: set[str], have: set[str], lexicon: dict, a
     present = asked skills written in the CV; omitted = asked skills of your profile missing from the CV (fixable);
     lacking = asked skills you do not have (never added: no invented content); title = domain words of the offer title
     found in the CV headline."""
-    from app.agent.agent002_offer_collector import domain_tokens
+    from app.agent.common_text import domain_tokens
     t = fold(cv_text)
 
     def found(skill):
@@ -321,26 +239,6 @@ def match_lines(m: dict) -> list[str]:
     if m["title_words"]:
         out.append("- Intitulé de l'offre repris dans ton titre : " + (", ".join(m["title_in_headline"]) if m["title_in_headline"]
                                                                        else f"non (mots de l'offre : {', '.join(m['title_words'])})"))
-    return out
-
-
-def company_lines(ctx: RunContext, name: str) -> list[str]:
-    """The company sheet of agent005 (each fact with its kind and source), or 'missing'."""
-    from app.agent.agent005_company_researcher import company_key
-    with ctx.connect() as c:
-        row = c.execute("SELECT facts, match_confidence FROM companies WHERE company_key=?", (company_key(name),)).fetchone()
-    if not row:
-        return ["- information absente (pas de fiche pour cette entreprise)"]
-    out = [] if row[1] >= 0.6 else [f"- Correspondance incertaine avec le registre ({row[1]}) : à vérifier"]
-    sources = []
-    for f in json.loads(row[0]):
-        tag = {"verified_fact": "", "hypothesis": " (hypothèse)", "missing": " (absent)",
-               "retrieval_error": " (erreur de récupération)"}.get(f["kind"], "")
-        out.append(f"- {f['label']}{tag} : {f['value']}")
-        if f["source"].startswith("http") and f["source"] not in sources:
-            sources.append(f["source"])
-    if sources:
-        out.append("- Sources : " + " ; ".join(sources))
     return out
 
 
@@ -518,8 +416,7 @@ class Agent(BaseAgent):
         must = [ident["full_name"], ident.get("email", ""), *SECTIONS,
                 *[b for e in sel["experiences"] for b in e["bullets"]], *[b for p in kept_projects for b in p["bullets"]]]
         # ---- QA: what a screening software finds of the offer in the final CV (CV_OFFER_MATCH)
-        have = set(skills_p) | {fold(x) for sec in ("experiences", "projects", "education") for it in profile.get(sec) or []
-                                for b in it.get("bullets") or [] for x in b.get("skills") or []}
+        have = own_skills(profile)
         names = {fold(sk["name"]): sk["name"] for sk in profile.get("skills") or []}
         match = cv_offer_match(text, req, have, lexicon, aliases, offer["title"], header["headline"])
         match["added"] = []
@@ -657,6 +554,21 @@ class Agent(BaseAgent):
                                                      "offer_coverage": match["coverage"],
                                                      "corrections": corrections, "kept_despite": len(bad)},
                         sources=[{"kind": "verified_fact", "ref": "profile.yaml"}, {"kind": "verified_fact", "ref": offer["url"]}])
+
+
+# =========================================================================== USER_ACTIONS (called by agent000.act)
+def action_mark_sent(orch, *, application_id: str) -> dict:
+    """You sent the application yourself (nothing is ever sent by job_pilot): the 'ready' package becomes 'sent'."""
+    with db_connect(orch.db_path) as c:
+        row = c.execute("SELECT offer_id FROM applications WHERE application_id=? AND status='ready'",
+                        (application_id,)).fetchone()
+        if not row:
+            raise NotFound(application_id)
+        c.execute("UPDATE applications SET status='sent', sent_at=? WHERE application_id=?", (utc_now(), application_id))
+    return {"event": "application_sent", "detail": application_id, "offer_id": row[0]}
+
+
+ACTIONS = {"mark_sent": action_mark_sent}
 
 
 if __name__ == "__main__":

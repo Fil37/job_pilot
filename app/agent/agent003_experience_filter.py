@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 import sys
 
-from app.agent import BaseAgent, RunContext, envelope, fold, sentences, upsert, utc_now
+from app.agent import NotFound, BaseAgent, RunContext, db_connect, envelope, fold, sentences, upsert, utc_now
 
 SKILLS = [
     {"skill_id": "SK_EXP_EXTRACT", "version": "1", "status": "proposed",
@@ -191,6 +191,20 @@ def decide(x: dict, months: dict, rule: dict, exp_cfg: dict) -> dict:
     return res("keep", "NO_REQUIREMENT", "aucune exigence d'expérience dans le texte complet", None, 0.7)
 
 
+# =========================================================================== USER_ACTIONS (called by agent000.act)
+def action_set_user_decision(orch, *, offer_id: str, choice: str) -> dict:
+    """YOUR decision on an offer ('keep' or 'reject'): kept apart from the program's, which stays visible."""
+    if choice not in ("keep", "reject"):
+        raise ValueError(f"unknown choice {choice}")
+    with db_connect(orch.db_path) as c:
+        if c.execute("UPDATE experience_decisions SET user_override=? WHERE offer_id=?", (choice, offer_id)).rowcount == 0:
+            raise NotFound(offer_id)
+    return {"event": "user_decision", "detail": f"{offer_id}: {choice}"}
+
+
+ACTIONS = {"set_user_decision": action_set_user_decision}
+
+
 class Agent(BaseAgent):
     AGENT_ID = AGENT_ID
     SKILLS = SKILLS
@@ -209,8 +223,11 @@ class Agent(BaseAgent):
         prof = self.profile(ctx)
         with ctx.connect() as c:
             ids = [r[0] for r in c.execute(
+                # not decided yet for this profile, or decided before the offer's text changed (TEXT_CHANGED: full text
+                # read or pasted; your own decision on it is kept, only the program's is recomputed)
                 "SELECT o.offer_id FROM offers o WHERE o.status='new' AND NOT EXISTS (SELECT 1 FROM experience_decisions d "
-                "WHERE d.offer_id=o.offer_id AND d.profile_hash=?) ORDER BY o.first_seen_at", (prof["profile_hash"],))]
+                "WHERE d.offer_id=o.offer_id AND d.profile_hash=? AND (o.text_updated_at IS NULL OR "
+                "d.decided_at >= o.text_updated_at)) ORDER BY o.first_seen_at", (prof["profile_hash"],))]
         return [{"objective": f"decide {len(ids[i:i + 100])} offers", "offer_ids": ids[i:i + 100]}
                 for i in range(0, len(ids), 100)] or [{"objective": "nothing new to decide", "offer_ids": []}]
 
@@ -253,12 +270,26 @@ class Agent(BaseAgent):
                         "candidate_years": d["candidate_years"], "excludes_internship": x["excludes_internship"],
                         "excludes_apprenticeship": x["excludes_apprenticeship"], "junior_signal": x["junior"],
                         "senior_signal": (x["senior"] or "").strip() or None, "confidence": d["confidence"],
-                        "user_override": None, "decided_at": utc_now()})
+                        "decided_at": utc_now()})     # user_override never written here: YOUR decision is kept
                     counts[d["decision"]] += 1
                     reasons[d["reason_code"]] = reasons.get(d["reason_code"], 0) + 1
         ctx.store.record_outcomes(ctx.run_id, outcomes)
         return envelope(ctx, AGENT_ID, "succeeded", data={**counts, "reasons": reasons}, warnings=warnings,
                         metrics={**counts, "decided": sum(counts.values())})
+
+
+# =========================================================================== USER_ACTIONS (called by agent000.act)
+def action_set_user_decision(orch, *, offer_id: str, choice: str) -> dict:
+    """YOUR decision on an offer ('keep' or 'reject'): kept apart from the program's, which stays visible."""
+    if choice not in ("keep", "reject"):
+        raise ValueError(f"unknown choice {choice}")
+    with db_connect(orch.db_path) as c:
+        if c.execute("UPDATE experience_decisions SET user_override=? WHERE offer_id=?", (choice, offer_id)).rowcount == 0:
+            raise NotFound(offer_id)
+    return {"event": "user_decision", "detail": f"{offer_id}: {choice}"}
+
+
+ACTIONS = {"set_user_decision": action_set_user_decision}
 
 
 if __name__ == "__main__":

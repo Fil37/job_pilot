@@ -21,14 +21,14 @@ Error policy     : a company not found stays with 'missing' facts; a source down
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 
+from app.agent.common_company import (company_key)  # noqa: F401 - shared, see common_company.py
 from app.agent import BaseAgent, RunContext, envelope, fold, upsert, utc_now
-from app.agent.agent002_offer_collector import LEGAL, Http, SourceError
+from app.agent.common_http import Http, SourceError
 
 SKILLS = [
     {"skill_id": "SK_COMPANY_BRIEF", "version": "1", "status": "proposed",
@@ -47,10 +47,6 @@ def fr_date(iso: str | None) -> str:
     """'2020-01-21' → '21/01/2020' (French reading); unknown stays '?'."""
     m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", iso or "")
     return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else (iso or "?")
-
-
-def company_key(name: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9& ]+", " ", re.sub(LEGAL, " ", fold(name)))).strip()
 
 
 def name_similarity(a: str, b: str) -> float:

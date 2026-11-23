@@ -289,7 +289,8 @@ def test_project_done_sheet_makes_the_card():
     no_alt = {**form, "image": (io.BytesIO(b"\x89PNG data"), "a.png")}
     assert "error=" in cl.post("/docs/brief/b_d/done", data=no_alt, content_type="multipart/form-data").headers["Location"]
     ok = {**form, "image": (io.BytesIO(b"\x89PNG data"), "a.png"), "image_alt": "Le banc de mesure"}
-    assert "#projects" in cl.post("/docs/brief/b_d/done", data=ok, content_type="multipart/form-data").headers["Location"]
+    rr = cl.post("/docs/brief/b_d/done", data=ok, content_type="multipart/form-data")
+    assert rr.status_code == 302 and "#projects" in rr.headers["Location"], rr.data[:3000]
     saved = _json.loads(sqlite3.connect(orch.db_path).execute("SELECT brief FROM project_briefs WHERE brief_id='b_d'").fetchone()[0])
     card = saved["card"]
     assert saved["done_on"] == "2025-05" and card["categories"] == ["fpga"] and card["position"] == "after:Old one"

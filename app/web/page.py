@@ -14,11 +14,10 @@ import threading
 from pathlib import Path
 
 from markupsafe import Markup
-from urllib.parse import urlsplit
 
 from flask import abort, g, redirect, render_template, request, send_file, session, url_for
 
-from app.agent import db_connect, utc_now
+from app.agent import NotFound, db_connect
 from app.agent.agent000_job_pilot import chain_label
 from app.agent import supervision as sv
 from app.agent.agent000_job_pilot import Orchestrator, application_params, build_digest
@@ -29,21 +28,9 @@ LINK_RX = re.compile(r"(https?://[^\s<>()]+[^\s<>().,;:!?»])")
 
 def label_skills(skill_csv: str, alts_json) -> str:
     """'verilog ou vhdl' when the offer accepts either (SKILL_ALTERNATIVES)."""
-    from app.agent.agent004_offer_scorer import skill_label
+    from app.agent.common_scoring import skill_label
     alts = json.loads(alts_json) if isinstance(alts_json, str) else (alts_json or {})
     return ", ".join(skill_label(x.strip(), alts) for x in (skill_csv or "").split(","))
-
-
-def hw_from_line(line: str) -> dict:
-    """'name | role | specs | example | alternative | facultatif' (edit form) → a hardware item."""
-    parts = [x.strip() for x in line.split("|")] + [""] * 6
-    return {"name": parts[0], "role": parts[1], "specs": parts[2], "example": parts[3], "alternative": parts[4],
-            "optional": fold_text(parts[5]).startswith("facultatif")}
-
-
-def fold_text(t: str) -> str:
-    from app.agent import fold
-    return fold(t or "")
 
 
 def inline_md(text: str) -> str:
@@ -201,8 +188,7 @@ def register(app, orch: Orchestrator) -> None:
     @app.post("/alerts/<int:alert_id>/seen")
     def alert_seen(alert_id: int):
         check_csrf()
-        with db_connect(orch.db_path) as c:
-            c.execute("UPDATE alerts SET seen_at=? WHERE alert_id=? AND seen_at IS NULL", (utc_now(), alert_id))
+        orch.act("agent000", "mark_alerts_seen", alert_id=alert_id)
         return redirect(url_for("home") + "#alerts")
 
     # ------------------------------------------------------------------ project ideas (agent007) and portfolio (agent008)
@@ -253,31 +239,20 @@ def register(app, orch: Orchestrator) -> None:
 
     @app.post("/entries/<entry_id>/publish")
     def entry_publish(entry_id: str):
+        """USER_ACTIONS: your real date goes to the project (agent007), the request to the portfolio (agent008)."""
         check_csrf()
-        from datetime import datetime as _dt
-        try:
-            pub = _dt.fromisoformat(request.form.get("publish_at", ""))
-            exp = _dt.fromisoformat(request.form["expire_at"]) if request.form.get("expire_at") else None
-        except ValueError:
-            return redirect(url_for("home", msg="Invalid date.") + "#projects")
-        if exp and exp <= pub:
-            return redirect(url_for("home", msg="Invalid date.") + "#projects")
-        from app.agent.agent008_portfolio_publisher import parse_done_on
-        try:
-            done_on = parse_done_on(request.form.get("done_on"))
-        except ValueError:
-            return redirect(url_for("home", msg="Give the real date of the project (not in the future).") + "#projects")
-        cfg = orch.config["portfolio"]
         with db_connect(orch.db_path) as c:
-            row = c.execute("SELECT p.slug, b.brief_id, b.brief FROM portfolio_entries p JOIN project_briefs b "
-                            "USING(brief_id) WHERE p.entry_id=?", (entry_id,)).fetchone()
-            if not row:
-                abort(404)
-            brief = {**json.loads(row[2]), "done_on": done_on}
-            c.execute("UPDATE project_briefs SET brief=? WHERE brief_id=?", (json.dumps(brief, ensure_ascii=False), row[1]))
-        orch.store.request_approval("publish_portfolio_entry", entry_id, {
-            "repo": cfg["repo"], "file": cfg["file"], "slug": row[0], "publish_at": pub.isoformat(timespec="minutes"),
-            "expire_at": exp.isoformat(timespec="minutes") if exp else None, "done_on": done_on})
+            row = c.execute("SELECT brief_id FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
+        if not row:
+            abort(404)
+        try:
+            orch.act("agent007", "set_done_on", brief_id=row[0], done_on=request.form.get("done_on") or "")
+            orch.act("agent008", "request_publication", entry_id=entry_id, publish_at=request.form.get("publish_at", ""),
+                     expire_at=request.form.get("expire_at") or None, done_on=request.form.get("done_on"))
+        except ValueError as exc:
+            return redirect(url_for("home", msg=str(exc)) + "#projects")
+        except NotFound:
+            abort(404)
         return redirect(url_for("home", msg="Publication requested: approve it on the Supervision page.") + "#projects")
 
     @app.post("/runs")
@@ -302,17 +277,11 @@ def register(app, orch: Orchestrator) -> None:
     @app.post("/inbox")
     def add_offer():
         check_csrf()
-        f = {k: (request.form.get(k) or "").strip() for k in
-             ("url", "title", "company", "location", "contract", "salary_text", "description")}
-        u = urlsplit(f["url"])
-        if (u.scheme not in ("http", "https") or not u.netloc or not f["title"] or not f["company"]
-                or len(f["description"]) < 40 or any(len(v) > 20000 for v in f.values())):
-            return redirect(url_for("home", msg="Invalid form."))
-        with db_connect(orch.db_path) as c:
-            c.execute("INSERT INTO offer_inbox(url, title, company, location, contract, salary_text, description, "
-                      "origin_label, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                      (f["url"], f["title"][:300], f["company"][:200], f["location"][:200] or None,
-                       f["contract"][:50] or None, f["salary_text"][:200] or None, f["description"], u.netloc, utc_now()))
+        try:
+            orch.act("agent002", "add_manual_offer", **{k: request.form.get(k) or "" for k in
+                     ("url", "title", "company", "location", "contract", "salary_text", "description")})
+        except ValueError as exc:
+            return redirect(url_for("home", msg=str(exc)))
         return redirect(url_for("home", msg="Offer added to the inbox."))
 
     # ------------------------------------------------------------------ offer detail
@@ -332,7 +301,7 @@ def register(app, orch: Orchestrator) -> None:
                             (o["first_seen_run"],)).fetchone()
             apps = [dict(r) for r in c.execute("SELECT * FROM applications WHERE offer_id=? ORDER BY created_at DESC",
                                                (offer_id,))]
-        from app.agent.agent005_company_researcher import company_key
+        from app.agent.common_company import company_key
         with db_connect(orch.db_path) as c:
             comp = c.execute("SELECT facts, match_confidence, updated_at FROM companies WHERE company_key=?",
                              (company_key(o["company"]),)).fetchone()
@@ -343,7 +312,7 @@ def register(app, orch: Orchestrator) -> None:
             drafts = [dict(r) for r in c.execute(f"SELECT * FROM followup_drafts WHERE application_id IN ({q})", ids)]
             briefs = [dict(r) for r in c.execute("SELECT brief_id, skill, title, status, json_extract(brief, '$.alternatives') "
                                                  "AS alts FROM project_briefs WHERE offer_id=?", (offer_id,))]
-            from app.agent.agent004_offer_scorer import project_gain
+            from app.agent.common_scoring import project_gain
             for br in briefs:                       # PROJECT_GAIN, computed now (your profile may have changed)
                 br["gain"] = project_gain(c, offer_id, [x.strip() for x in br["skill"].split(",")],
                                           criteria=orch.instance["criteria"], words=orch.schemas["words"],
@@ -374,36 +343,29 @@ def register(app, orch: Orchestrator) -> None:
     def offer_decision(offer_id: str):
         check_csrf()
         choice = request.form.get("choice")
-        with db_connect(orch.db_path) as c:
+        try:
             if choice in ("keep", "reject"):
-                cur = c.execute("UPDATE experience_decisions SET user_override=? WHERE offer_id=?", (choice, offer_id))
+                orch.act("agent003", "set_user_decision", offer_id=offer_id, choice=choice)
             elif choice == "dismiss":
-                cur = c.execute("UPDATE offers SET status='dismissed' WHERE offer_id=? AND status='new'", (offer_id,))
+                orch.act("agent002", "set_offer_status", offer_id=offer_id, status="dismissed")
             else:
                 abort(400)
-            if cur.rowcount == 0:
-                abort(404)
-        orch.store.log_event("info", "user_decision", f"{offer_id}: {choice}", agent_id="user")
+        except NotFound:
+            abort(404)
         return redirect(url_for("offer", offer_id=offer_id))
 
     @app.post("/offers/<offer_id>/full_text")
     def offer_full_text(offer_id: str):
-        """ASK_FULL_TEXT: you paste the whole offer copied from its site; it replaces the excerpt (traced as an event)
-        and the offer is judged again (experience, score); a decision you took on it is kept."""
+        """ASK_FULL_TEXT: you paste the whole offer copied from its site (agent002 keeps it), its alert is marked seen
+        (agent000) and the offer is judged again (rescore chain); a decision you took on it is kept."""
         check_csrf()
-        text = (request.form.get("text") or "").replace("\r\n", "\n").strip()
-        if not 200 <= len(text) <= 60000:
+        try:
+            orch.act("agent002", "set_full_text", offer_id=offer_id, text=request.form.get("text") or "")
+        except ValueError:
             abort(400)
-        from app.agent.agent002_offer_collector import reset_judgement
-        with db_connect(orch.db_path) as c:
-            cur = c.execute("UPDATE offers SET description=?, description_complete=1 WHERE offer_id=?", (text, offer_id))
-            if cur.rowcount == 0:
-                abort(404)
-            reset_judgement(c, offer_id)
-            c.execute("UPDATE alerts SET seen_at=? WHERE category='full_text' AND ref=? AND seen_at IS NULL",
-                      (utc_now(), offer_id))
-        orch.store.log_event("info", "user_full_text", f"{offer_id}: full text pasted ({len(text)} characters)",
-                             agent_id="user")
+        except NotFound:
+            abort(404)
+        orch.act("agent000", "mark_alerts_seen", category="full_text", ref=offer_id)
         if not orch.busy() and _run_lock.acquire(blocking=False):
             def work():
                 try:
@@ -437,15 +399,12 @@ def register(app, orch: Orchestrator) -> None:
     @app.post("/applications/<application_id>/sent")
     def application_sent(application_id: str):
         check_csrf()
-        with db_connect(orch.db_path) as c:
-            row = c.execute("SELECT offer_id FROM applications WHERE application_id=? AND status='ready'",
-                            (application_id,)).fetchone()
-            if not row:
-                abort(404)
-            c.execute("UPDATE applications SET status='sent', sent_at=? WHERE application_id=?", (utc_now(), application_id))
-            c.execute("UPDATE offers SET status='applied' WHERE offer_id=?", (row[0],))
-        orch.store.log_event("info", "application_sent", application_id, agent_id="user")
-        return redirect(url_for("offer", offer_id=row[0], msg="Application marked as sent."))
+        try:
+            done = orch.act("agent006", "mark_sent", application_id=application_id)
+            orch.act("agent002", "set_offer_status", offer_id=done["offer_id"], status="applied")
+        except NotFound:
+            abort(404)
+        return redirect(url_for("offer", offer_id=done["offer_id"], msg="Application marked as sent."))
 
     @app.get("/applications/<application_id>/<name>")
     def application_file(application_id: str, name: str):
@@ -492,7 +451,7 @@ def register(app, orch: Orchestrator) -> None:
         form = {k: ans.get(k, "") for k in ("title", "objective", "portfolio_summary", "architecture", "interview_pitch")}
         form["builds_on"] = ", ".join(ans.get("builds_on") or [])
         form["done_on"] = ans.get("done_on", "")
-        from app.agent.agent007_gap_project_planner import hw_item
+        from app.agent.common_projects import hw_item
         for k in LIST_FIELDS:
             form[k] = "\n".join(ans.get(k) or []) if k != "hardware" else "\n".join(
                 " | ".join([d["name"], d["role"], d["specs"], d["example"], d["alternative"], "facultatif" if d["optional"] else ""]).rstrip(" |")
@@ -505,49 +464,20 @@ def register(app, orch: Orchestrator) -> None:
 
     @app.post("/docs/brief/<brief_id>/edit")
     def brief_save(brief_id: str):
-        """You edit the project: every field is yours; only the public summary keeps its rule (BRIEF_PUBLIC_SUMMARY,
-        it goes on your public portfolio). The brief file is rewritten and the edit is traced."""
+        """You edit the project (agent007 owns it and rewrites the file); traced."""
         check_csrf()
-        from app.agent.agent007_gap_project_planner import brief_markdown, public_summary_problems
-        b, offer, path = _brief(brief_id)
-        f = {k: (request.form.get(k) or "").replace("\r\n", "\n").strip() for k in
-             ("title", "objective", "portfolio_summary", "architecture", "interview_pitch", "builds_on", "steps", *LIST_FIELDS)}
-        if not f["title"] or not f["objective"] or any(len(v) > 20000 for v in f.values()):
-            return redirect(url_for("brief_edit", brief_id=brief_id, error="A title and an objective are required."))
-        from app.agent.agent008_portfolio_publisher import parse_done_on
-        done_on = (request.form.get("done_on") or "").strip()
-        if done_on:
-            try:
-                done_on = parse_done_on(done_on)
-            except ValueError:
-                return redirect(url_for("brief_edit", brief_id=brief_id,
-                                        error="Give the real date of the project (not in the future)."))
-        bad = public_summary_problems(f["portfolio_summary"])
-        if bad:
-            return redirect(url_for("brief_edit", brief_id=brief_id,
-                                    error="The public summary must describe what is built: remove " + ", ".join(bad)))
-        steps = []
-        for line in f["steps"].split("\n"):
-            if line.strip():
-                parts = [x.strip() for x in line.split("|")] + ["", ""]
-                steps.append({"days": parts[0], "milestone": parts[1], "deliverable": parts[2]})
-        ans = {**b["brief"], "title": f["title"], "objective": f["objective"], "portfolio_summary": f["portfolio_summary"],
-               "architecture": f["architecture"], "interview_pitch": f["interview_pitch"],
-               "builds_on": [x.strip() for x in f["builds_on"].split(",") if x.strip()], "steps": steps,
-               **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS if k != "hardware"},
-               "hardware": [hw_from_line(x) for x in f["hardware"].split("\n") if x.strip()], "edited_at": utc_now(),
-               "done_on": done_on or None}
-        path.write_text(brief_markdown(offer, [x.strip() for x in b["skill"].split(",")], ans), encoding="utf-8")
-        with db_connect(orch.db_path) as c:
-            c.execute("UPDATE project_briefs SET title=?, brief=? WHERE brief_id=?",
-                      (ans["title"], json.dumps(ans, ensure_ascii=False), brief_id))
-        orch.store.log_event("info", "user_brief_edit", f"{brief_id}: edited by you", agent_id="user")
+        try:
+            orch.act("agent007", "edit_brief", brief_id=brief_id, form=request.form.to_dict())
+        except ValueError as exc:
+            return redirect(url_for("brief_edit", brief_id=brief_id, error=str(exc)))
+        except NotFound:
+            abort(404)
         return redirect(url_for("document", kind="brief", ref=brief_id))
 
     # ------------------------------------------------------------------ "Projet réalisé" sheet → portfolio card (agent008)
     def _grid_titles():
         """Cards of your portfolio grid, read from the latest demo (a local copy of your public page)."""
-        from app.agent.agent008_portfolio_publisher import grid_titles
+        from app.agent.common_projects import grid_titles
         demos = sorted(orch.runs_dir.glob("*/portfolio_demo/" + orch.config["portfolio"]["file"]),
                        key=lambda x: x.stat().st_mtime)
         if not demos:
@@ -580,60 +510,21 @@ def register(app, orch: Orchestrator) -> None:
 
     @app.post("/docs/brief/<brief_id>/done")
     def brief_done_save(brief_id: str):
-        """CARD_LIKE_YOURS: the card is made only from this sheet YOU fill (what you really built, your figures, your
-        link, your image); REAL_PROJECT_DATE and IMAGE_SAFE apply. Traced; nothing is published here."""
+        """CARD_LIKE_YOURS: your 'Projet réalisé' sheet, kept by agent007 (its checks: real date, link, categories,
+        IMAGE_SAFE); nothing is published here."""
         check_csrf()
-        from app.agent.agent008_portfolio_publisher import image_problem, parse_done_on
-        b, _offer, _path = _brief(brief_id)
-        f = {k: (request.form.get(k) or "").replace("\r\n", "\n").strip() for k in
-             ("short_name", "domain", "context", "title", "summary", "details_title", "details", "tags", "link_url",
-              "link_label", "image_alt", "position", "done_on")}
-
-        def back(msg):
-            return redirect(url_for("brief_done", brief_id=brief_id, error=msg))
-        if not (f["short_name"] and f["title"] and f["summary"]) or any(len(v) > 6000 for v in f.values()):
-            return back("A short name, a title and a summary are required.")
-        try:
-            done_on = parse_done_on(f["done_on"])
-        except ValueError:
-            return back("Give the real date of the project (not in the future).")
-        if f["link_url"] and not re.fullmatch(r"https://[^\s\"'<>]+", f["link_url"]):
-            return back("The link must start with https://")
-        cats = [x for x in request.form.getlist("categories") if x in orch.config["portfolio"].get("categories", {})]
-        if not cats:
-            return back("Choose at least one category of your portfolio.")
-        if not (f["position"] in ("first", "last") or f["position"].startswith("after:")):
-            f["position"] = "first"
-        figures = []
-        for i in range(3):
-            v, lab = (request.form.get(f"fig_value_{i}") or "").strip(), (request.form.get(f"fig_label_{i}") or "").strip()
-            if v:
-                figures.append({"value": v[:24], "label": lab[:100]})
-        card = {**{k: f[k] for k in ("short_name", "domain", "context", "title", "summary", "details_title", "details",
-                                     "link_url", "link_label", "image_alt", "position")},
-                "tags": [x.strip() for x in f["tags"].split(",") if x.strip()][:14], "categories": cats, "figures": figures,
-                "image_file": (b["brief"].get("card") or {}).get("image_file")}
         up = request.files.get("image")
-        if up and up.filename:
-            data = up.read()
-            bad = image_problem(up.filename, data, orch.config["portfolio"].get("image_max_bytes", 2_000_000))
-            if bad:
-                return back(bad)
-            if not f["image_alt"]:
-                return back("Describe the image (alternative text) for people who cannot see it.")
-            folder = orch.runs_dir / "portfolio_assets"
-            folder.mkdir(parents=True, exist_ok=True)
-            dest = folder / f"{brief_id}{Path(up.filename).suffix.lower()}"
-            for old in folder.glob(f"{brief_id}.*"):
-                old.unlink()
-            dest.write_bytes(data)
-            card["image_file"] = str(dest)
-        if request.form.get("remove_image"):
-            card["image_file"] = None
-        ans = {**b["brief"], "card": card, "done_on": done_on}
-        with db_connect(orch.db_path) as c:
-            c.execute("UPDATE project_briefs SET brief=? WHERE brief_id=?", (json.dumps(ans, ensure_ascii=False), brief_id))
-        orch.store.log_event("info", "user_project_done", f"{brief_id}: 'Projet réalisé' sheet saved", agent_id="user")
+        try:
+            orch.act("agent007", "save_project_sheet", brief_id=brief_id, form=request.form.to_dict(),
+                     categories=request.form.getlist("categories"),
+                     figures=[(request.form.get(f"fig_value_{i}") or "", request.form.get(f"fig_label_{i}") or "")
+                              for i in range(3)],
+                     image=(up.filename, up.read()) if up and up.filename else None,
+                     remove_image=bool(request.form.get("remove_image")))
+        except ValueError as exc:
+            return redirect(url_for("brief_done", brief_id=brief_id, error=str(exc)))
+        except NotFound:
+            abort(404)
         return redirect(url_for("home", msg="Project sheet saved: make the demo to see the card.") + "#projects")
 
     # ------------------------------------------------------------------ documents in the application's look
@@ -668,7 +559,7 @@ def register(app, orch: Orchestrator) -> None:
                     offer["url"] = None
         hardware = None
         if kind == "brief":                         # HARDWARE_DETAIL: the hardware panel shows each item's details on hover
-            from app.agent.agent007_gap_project_planner import hw_item
+            from app.agent.common_projects import hw_item
             with db_connect(orch.db_path) as c:
                 br = c.execute("SELECT brief FROM project_briefs WHERE brief_id=?", (ref,)).fetchone()
             hw = (json.loads(br[0]) if br and br[0] else {}).get("hardware") or []

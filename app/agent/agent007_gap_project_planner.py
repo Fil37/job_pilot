@@ -31,11 +31,12 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.agent import ROOT, BaseAgent, RunContext, envelope, fold, make_llm, sha, upsert, utc_now
-from app.agent.agent001_profile_builder import load_profile
-from app.agent.agent004_offer_scorer import (coverage_lines, gain_lines, offer_skills, offers_gain, project_gain,
+from app.agent.common_projects import (HW_KEYS, hw_item, image_problem, parse_done_on)  # noqa: F401 - shared, see common_projects.py
+from app.agent import NotFound, ROOT, BaseAgent, RunContext, db_connect, envelope, fold, make_llm, sha, upsert, utc_now
+from app.agent.common_profile import load_profile, own_skills
+from app.agent.common_scoring import (coverage_lines, gain_lines, offer_skills, offers_gain, project_gain,
                                              skill_alternatives, skill_label)
-from app.agent.agent006_application_builder import ask_with_corrections
+from app.agent.common_llm import ask_with_corrections
 
 SKILLS = [
     {"skill_id": "SK_GAP_AGGREGATE", "version": "3", "status": "proposed",
@@ -92,16 +93,6 @@ BRIEF_FIELDS = ("title", "objective", "portfolio_summary", "builds_on", "archite
                 "success_criteria", "pitfalls", "interview_pitch")
 
 
-HW_KEYS = ("name", "role", "specs", "example", "alternative")
-
-
-def hw_item(h) -> dict:
-    """HARDWARE_DETAIL: a hardware item as a dict (older briefs have plain strings)."""
-    if isinstance(h, dict):
-        return {**{k: str(h.get(k) or "").strip() for k in HW_KEYS}, "optional": bool(h.get("optional"))}
-    return {"name": str(h), "role": "", "specs": "", "example": "", "alternative": "", "optional": False}
-
-
 def hw_line(h) -> str:
     """One Markdown line of the brief file for a hardware item."""
     d = hw_item(h)
@@ -136,13 +127,13 @@ def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
     md += [f"Compétence(s) visée(s) : **{labels}**{choice}{score}", "",
            *(["## Gain attendu pour cette offre", "", *gain_lines(ans["gain"]), ""] if ans.get("gain") else []),
            *(["## Offres couvertes par ce projet", "", *coverage_lines(ans["coverage"]), ""] if ans.get("coverage") else []),
-           "## Objectif", "", ans["objective"], "", f"S'appuie sur : {', '.join(ans['builds_on'])}", "",
-           "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [hw_line(h) for h in ans["hardware"]] + [
-           "", "## Logiciels", ""] + [f"- {x}" for x in ans["software"]] + ["", "## Étapes et jalons", ""] + [
+           "## Objectif", "", ans.get("objective", ""), "", f"S'appuie sur : {', '.join(ans.get('builds_on') or [])}", "",
+           "## Architecture", "", ans.get("architecture", ""), "", "## Matériel", ""] + [hw_line(h) for h in ans.get("hardware") or []] + [
+           "", "## Logiciels", ""] + [f"- {x}" for x in ans.get("software") or []] + ["", "## Étapes et jalons", ""] + [
            f"- **{st.get('days')}** : {st.get('milestone')}" + (f" (livrable : {st.get('deliverable')})" if st.get("deliverable")
-                                                                else "") for st in ans["steps"]] + [
-           "", "## Critères de réussite", ""] + [f"- {x}" for x in ans["success_criteria"]] + ["", "## Pièges", ""] + [
-           f"- {x}" for x in ans["pitfalls"]] + ["", "## Le présenter en entretien", "", ans["interview_pitch"]]
+                                                                else "") for st in ans.get("steps") or []] + [
+           "", "## Critères de réussite", ""] + [f"- {x}" for x in ans.get("success_criteria") or []] + ["", "## Pièges", ""] + [
+           f"- {x}" for x in ans.get("pitfalls") or []] + ["", "## Le présenter en entretien", "", ans.get("interview_pitch", "")]
     if ans.get("portfolio_summary"):
         md += ["", "## Résumé public (carte du portfolio)", "", ans["portfolio_summary"]]
     if offer and offer.get("url"):
@@ -312,10 +303,7 @@ class Agent(BaseAgent):
         since = (datetime.now(timezone.utc) - timedelta(days=cfg["window_days"])).isoformat(timespec="seconds")
         today = datetime.now(timezone.utc).date().isoformat()
         profile = self._profile(ctx)
-        own = {fold(s["name"]) for s in profile.get("skills") or []}
-        own |= {fold(s) for sec in ("projects", "experiences", "education") for it in profile.get(sec) or []
-                for b in it.get("bullets") or [] for s in b.get("skills") or []}
-        own |= {fold(s) for s in profile.get("skills_written") or []}
+        own = own_skills(profile)
         with ctx.connect() as c:
             rows = [dict(r) for r in c.execute(
                 "SELECT s.offer_id, s.score, s.missing, s.matched, s.eliminated, s.scored_at, COALESCE(d.user_override, "
@@ -436,6 +424,138 @@ class Agent(BaseAgent):
         status = "succeeded" if written or not warnings else "partial"
         return envelope(ctx, AGENT_ID, status, artifact_refs=[w["path"] for w in written], warnings=warnings,
                         data={**metrics, "written": written, "alerts": alerts}, metrics=metrics)
+
+
+# =========================================================================== USER_ACTIONS (called by agent000.act)
+LIST_FIELDS = ("software", "success_criteria", "pitfalls")
+
+
+def _load_brief(orch, brief_id: str):
+    """(row, offer or None, file path) of a brief; the file must be inside the runs folder."""
+    with db_connect(orch.db_path) as c:
+        row = c.execute("SELECT * FROM project_briefs WHERE brief_id=?", (brief_id,)).fetchone()
+        if not row:
+            raise NotFound(brief_id)
+        b = dict(row)
+        offer = None
+        if b.get("offer_id"):
+            o = c.execute("SELECT offer_id, title, company, location, url FROM offers WHERE offer_id=?",
+                          (b["offer_id"],)).fetchone()
+            sc = c.execute("SELECT score FROM scores WHERE offer_id=? ORDER BY scored_at DESC LIMIT 1",
+                           (b["offer_id"],)).fetchone()
+            offer = {**dict(o), "score": sc[0] if sc else None} if o else None
+    b["brief"] = json.loads(b["brief"])
+    path = Path(b["path"]).resolve()
+    if Path(orch.runs_dir).resolve() not in path.parents:
+        path = None                                  # a file outside the runs folder is never written
+    return b, offer, path
+
+
+def _save_brief(orch, b: dict, offer, path: Path | None, ans: dict, title: str | None = None) -> None:
+    if path:
+        path.write_text(brief_markdown(offer, [x.strip() for x in b["skill"].split(",")], ans), encoding="utf-8")
+    with db_connect(orch.db_path) as c:
+        c.execute("UPDATE project_briefs SET title=?, brief=? WHERE brief_id=?",
+                  (title or b["title"], json.dumps(ans, ensure_ascii=False), b["brief_id"]))
+
+
+def hw_from_line(line: str) -> dict:
+    """'name | role | specs | example | alternative | facultatif' (edit form) → a hardware item."""
+    parts = [x.strip() for x in line.split("|")] + [""] * 6
+    return {"name": parts[0], "role": parts[1], "specs": parts[2], "example": parts[3], "alternative": parts[4],
+            "optional": fold(parts[5]).startswith("facultatif")}
+
+
+def action_edit_brief(orch, *, brief_id: str, form: dict) -> dict:
+    """You edit the project: every field is yours; only the public summary keeps its rule (BRIEF_PUBLIC_SUMMARY, it goes
+    on your public portfolio). The brief file is rewritten."""
+    b, offer, path = _load_brief(orch, brief_id)
+    keys = ("title", "objective", "portfolio_summary", "architecture", "interview_pitch", "builds_on", "steps", "hardware",
+            *LIST_FIELDS, "done_on")
+    f = {k: (form.get(k) or "").replace("\r\n", "\n").strip() for k in keys}
+    if not f["title"] or not f["objective"] or any(len(v) > 20000 for v in f.values()):
+        raise ValueError("A title and an objective are required.")
+    try:
+        done_on = parse_done_on(f["done_on"]) if f["done_on"] else None
+    except ValueError:
+        raise ValueError("Give the real date of the project (not in the future).") from None
+    bad = public_summary_problems(f["portfolio_summary"])
+    if bad:
+        raise ValueError("The public summary must describe what is built: remove " + ", ".join(bad))
+    steps = []
+    for line in f["steps"].split("\n"):
+        if line.strip():
+            parts = [x.strip() for x in line.split("|")] + ["", ""]
+            steps.append({"days": parts[0], "milestone": parts[1], "deliverable": parts[2]})
+    ans = {**b["brief"], "title": f["title"], "objective": f["objective"], "portfolio_summary": f["portfolio_summary"],
+           "architecture": f["architecture"], "interview_pitch": f["interview_pitch"],
+           "builds_on": [x.strip() for x in f["builds_on"].split(",") if x.strip()], "steps": steps,
+           **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS},
+           "hardware": [hw_from_line(x) for x in f["hardware"].split("\n") if x.strip()], "edited_at": utc_now(),
+           "done_on": done_on}
+    _save_brief(orch, b, offer, path, ans, f["title"])
+    return {"event": "user_brief_edit", "detail": f"{brief_id}: edited by you"}
+
+
+def action_set_done_on(orch, *, brief_id: str, done_on: str) -> dict:
+    """REAL_PROJECT_DATE: the date YOU give for when the project was really done."""
+    b, offer, path = _load_brief(orch, brief_id)
+    try:
+        real = parse_done_on(done_on)
+    except ValueError:
+        raise ValueError("Give the real date of the project (not in the future).") from None
+    _save_brief(orch, b, offer, path, {**b["brief"], "done_on": real})
+    return {"event": "user_project_date", "detail": f"{brief_id}: done on {done_on}"}
+
+
+def action_save_project_sheet(orch, *, brief_id: str, form: dict, categories: list[str], figures: list[tuple[str, str]],
+                              image: tuple[str, bytes] | None = None, remove_image: bool = False) -> dict:
+    """CARD_LIKE_YOURS: the 'Projet réalisé' sheet YOU fill (what you really built, your figures, your link, your image);
+    REAL_PROJECT_DATE and IMAGE_SAFE apply. Nothing is published here (agent008, after your approval)."""
+    b, offer, path = _load_brief(orch, brief_id)
+    keys = ("short_name", "domain", "context", "title", "summary", "details_title", "details", "tags", "link_url",
+            "link_label", "image_alt", "position", "done_on")
+    f = {k: (form.get(k) or "").replace("\r\n", "\n").strip() for k in keys}
+    if not (f["short_name"] and f["title"] and f["summary"]) or any(len(v) > 6000 for v in f.values()):
+        raise ValueError("A short name, a title and a summary are required.")
+    try:
+        done_on = parse_done_on(f["done_on"])
+    except ValueError:
+        raise ValueError("Give the real date of the project (not in the future).") from None
+    if f["link_url"] and not re.fullmatch(r"https://[^\s\"'<>]+", f["link_url"]):
+        raise ValueError("The link must start with https://")
+    cats = [x for x in categories if x in orch.config["portfolio"].get("categories", {})]
+    if not cats:
+        raise ValueError("Choose at least one category of your portfolio.")
+    if not (f["position"] in ("first", "last") or f["position"].startswith("after:")):
+        f["position"] = "first"
+    card = {**{k: f[k] for k in ("short_name", "domain", "context", "title", "summary", "details_title", "details",
+                                 "link_url", "link_label", "image_alt", "position")},
+            "tags": [x.strip() for x in f["tags"].split(",") if x.strip()][:14], "categories": cats,
+            "figures": [{"value": v.strip()[:24], "label": (lab or "").strip()[:100]} for v, lab in figures[:3] if (v or "").strip()],
+            "image_file": (b["brief"].get("card") or {}).get("image_file")}
+    if image and image[0]:
+        name, data = image
+        bad = image_problem(name, data, orch.config["portfolio"].get("image_max_bytes", 2_000_000))
+        if bad:
+            raise ValueError(bad)
+        if not f["image_alt"]:
+            raise ValueError("Describe the image (alternative text) for people who cannot see it.")
+        folder = Path(orch.runs_dir) / "portfolio_assets"
+        (folder / "archive").mkdir(parents=True, exist_ok=True)
+        for old in folder.glob(f"{brief_id}.*"):              # archived, never deleted
+            old.rename(folder / "archive" / f"{old.stem}_{utc_now().replace(':', '')}{old.suffix}")
+        dest = folder / f"{brief_id}{Path(name).suffix.lower()}"
+        dest.write_bytes(data)
+        card["image_file"] = str(dest)
+    if remove_image:
+        card["image_file"] = None
+    _save_brief(orch, b, offer, path, {**b["brief"], "card": card, "done_on": done_on})
+    return {"event": "user_project_done", "detail": f"{brief_id}: 'Projet réalisé' sheet saved"}
+
+
+ACTIONS = {"edit_brief": action_edit_brief, "set_done_on": action_set_done_on,
+           "save_project_sheet": action_save_project_sheet}
 
 
 if __name__ == "__main__":

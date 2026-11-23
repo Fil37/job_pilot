@@ -318,5 +318,30 @@
    "who": "user",
    "applied_by": "user (job_pilot.json)"
   }
- ]
+ ],
+ "user_actions": {
+  "_doc": "USER_ACTIONS: what the interface may ask, per owning agent (agent000.act); nothing else writes the business tables.",
+  "agent000": [
+   "mark_alerts_seen"
+  ],
+  "agent002": [
+   "add_manual_offer",
+   "set_full_text",
+   "set_offer_status"
+  ],
+  "agent003": [
+   "set_user_decision"
+  ],
+  "agent006": [
+   "mark_sent"
+  ],
+  "agent007": [
+   "edit_brief",
+   "save_project_sheet",
+   "set_done_on"
+  ],
+  "agent008": [
+   "request_publication"
+  ]
+ }
 }

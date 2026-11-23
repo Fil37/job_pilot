@@ -27,9 +27,11 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.agent import ROOT, BaseAgent, RunContext, envelope, fold, make_llm, sha, upsert, utc_now
-from app.agent.agent001_profile_builder import load_profile
-from app.agent.agent006_application_builder import ask_with_corrections, company_lines, fact_problems, profile_corpus
+from app.agent import ROOT, BaseAgent, RunContext, envelope, make_llm, sha, upsert, utc_now
+from app.agent.common_profile import load_profile
+from app.agent.common_company import company_lines
+from app.agent.common_llm import ask_with_corrections
+from app.agent.common_profile import fact_problems, profile_corpus
 
 SKILLS = [
     {"skill_id": "SK_INTERVIEW_SHEET", "version": "1", "status": "proposed",
