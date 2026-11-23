@@ -174,12 +174,18 @@ def compile_tex(ctx: RunContext, folder: Path, name: str) -> tuple[bool, str]:
 
 
 def pdf_pages(pdf: Path) -> int:
+    if not shutil.which("pdfinfo"):              # PDF_WITHOUT_POPPLER (online, apt may fail): pure Python
+        from pypdf import PdfReader
+        return len(PdfReader(str(pdf)).pages)
     out = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True, timeout=30).stdout
     m = re.search(r"^Pages:\s+(\d+)", out, re.M)
     return int(m.group(1)) if m else 0
 
 
 def pdf_text(pdf: Path) -> str:
+    if not shutil.which("pdftotext"):            # PDF_WITHOUT_POPPLER
+        from pypdf import PdfReader
+        return "\n".join(pg.extract_text() or "" for pg in PdfReader(str(pdf)).pages)
     return subprocess.run(["pdftotext", "-enc", "UTF-8", str(pdf), "-"], capture_output=True, text=True,
                           timeout=30).stdout
 

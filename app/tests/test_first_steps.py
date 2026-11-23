@@ -119,5 +119,18 @@ def test_criteria_from_the_interface():
     assert repo.endswith("camille.github.io") and cats == {"data": "Data"}
 
 
+def test_pdf_text_without_poppler_uses_pypdf():
+    """PDF_WITHOUT_POPPLER (online, apt may fail): the CV text is still read, in pure Python."""
+    import shutil as _sh
+    from app.agent import common_profile
+    real = _sh.which
+    _sh.which = lambda name, *a, **k: None if name in ("pdftotext", "pdfinfo") else real(name, *a, **k)
+    try:
+        text = common_profile.pdf_bytes_to_text(tiny_pdf(CV))
+    finally:
+        _sh.which = real
+    assert "Pipeline d'ingestion Python et Airflow" in text and "Camille Martin" in text
+
+
 if __name__ == "__main__":
     run_main(globals())

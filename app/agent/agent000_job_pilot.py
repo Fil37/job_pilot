@@ -501,8 +501,8 @@ def setup_checks(orch) -> list[dict]:
     llm = orch.config["llm"]
     add("model key", bool(os.environ.get(llm["api_key_env"])), llm["api_key_env"],
         f"Put your {llm['provider']} key in {llm['api_key_env']} (.env locally, secrets online).")
-    add("pdftotext / pdfinfo", bool(shutil.which("pdftotext") and shutil.which("pdfinfo")), "poppler-utils",
-        "Install poppler-utils (packages.txt online).")
+    add("pdftotext / pdfinfo", bool(shutil.which("pdftotext") and shutil.which("pdfinfo")), "poppler-utils (else pypdf)",
+        "Optional: poppler-utils reads PDFs a bit better; pypdf is used without it.", optional=True)
     eng = orch.config["latex"].get("engine_path") or "tectonic"
     add("LaTeX (Tectonic)", bool(shutil.which(eng) or Path(os.path.expanduser(eng)).is_file()), eng,
         "Install Tectonic to compile your CV (downloaded automatically online).")
@@ -510,7 +510,8 @@ def setup_checks(orch) -> list[dict]:
     add("mailbox (read-only)", bool(mb.get("host") and mb.get("user") and os.environ.get(mb.get("password_env", "IMAP_PASSWORD"))),
         mb.get("host") or "not configured", "Optional: an app password of your mailbox in IMAP_PASSWORD.", optional=True)
     pf = orch.config["portfolio"]
-    add("portfolio", bool(pf.get("repo")) and bool(os.environ.get(pf["token_env"])), pf.get("repo") or "not configured",
+    from app.agent.common_projects import portfolio_token
+    add("portfolio", bool(pf.get("repo")) and bool(portfolio_token(pf)), pf.get("repo") or "not configured",
         f"Optional: your GitHub Pages repository below, and a token in {pf['token_env']}.", optional=True)
     return out
 

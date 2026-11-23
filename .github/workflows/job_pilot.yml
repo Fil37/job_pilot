@@ -1,0 +1,55 @@
+# job_pilot online: the automatic chains run here while the Streamlit app sleeps (one person, private repository).
+# Each run takes the lease, restores your ENCRYPTED instance snapshot from Postgres (Neon), runs the chain, saves the
+# snapshot and releases the lease (app/agent/common_cloud.py). Nothing is ever sent on your behalf.
+# Budget (private repository, ~2,000 free minutes a month): daily ~5 min, mails every hour ~2 min → ~1,600 min a month.
+# Every 2 hours instead: change "15 * * * *" to "15 */2 * * *".
+name: job_pilot
+on:
+  schedule:
+    - cron: "30 5 * * *"      # daily chain: collection, filter, score, companies, projects (07:30 Paris in winter)
+    - cron: "15 * * * *"      # mails (read-only), interview sheets, follow-ups, then due portfolio publications
+    - cron: "0 6 * * 1"       # weekly analysis (Monday)
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: "Chain to run now"
+        required: true
+        default: daily
+        type: choice
+        options: [daily, inbox, weekly, rescore, portfolio]
+concurrency:
+  group: job_pilot
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+      PORTFOLIO_TOKEN: ${{ secrets.PORTFOLIO_TOKEN }}
+      JOB_PILOT_DATABASE_URL: ${{ secrets.JOB_PILOT_DATABASE_URL }}
+      JOB_PILOT_SNAPSHOT_KEY: ${{ secrets.JOB_PILOT_SNAPSHOT_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run the chain (lease, restore, run, save, release)
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          CHOSEN: ${{ inputs.chain }}
+        run: |
+          export JOB_PILOT_INSTANCE_DIR="$RUNNER_TEMP/instance"
+          case "$SCHEDULE" in
+            "30 5 * * *") CHAIN=daily ;;
+            "0 6 * * 1") CHAIN=weekly ;;
+            "15 * * * *"|"15 */2 * * *") CHAIN=inbox ;;
+            *) CHAIN="$CHOSEN" ;;
+          esac
+          python -m app.agent.agent000_job_pilot --chain "$CHAIN" --sync
+          if [ "$CHAIN" = inbox ]; then python -m app.agent.agent000_job_pilot --chain portfolio --sync; fi

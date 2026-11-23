@@ -80,3 +80,11 @@ def hw_item(h) -> dict:
     if isinstance(h, dict):
         return {**{k: str(h.get(k) or "").strip() for k in HW_KEYS}, "optional": bool(h.get("optional"))}
     return {"name": str(h), "role": "", "specs": "", "example": "", "alternative": "", "optional": False}
+
+
+def portfolio_token(cfg: dict) -> str:
+    """The portfolio token: settings.portfolio.token_env (GITHUB_TOKEN locally) or PORTFOLIO_TOKEN (online: GitHub
+    refuses secrets named GITHUB_*). Empty when none."""
+    import os
+    return os.environ.get(cfg.get("token_env") or "GITHUB_TOKEN") or os.environ.get("PORTFOLIO_TOKEN") or ""
+

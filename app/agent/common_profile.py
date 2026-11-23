@@ -108,10 +108,15 @@ def pdf_bytes_to_text(data: bytes) -> str:
     import shutil
     import subprocess
     import tempfile
-    if not shutil.which("pdftotext"):
-        raise RuntimeError("pdftotext (poppler-utils) is not installed")
     if not data.startswith(b"%PDF"):
         raise ValueError("This file is not a PDF.")
+    if not shutil.which("pdftotext"):            # PDF_WITHOUT_POPPLER (online, apt may fail): pure Python
+        import io
+        from pypdf import PdfReader
+        text = "\n".join(pg.extract_text() or "" for pg in PdfReader(io.BytesIO(data)).pages)
+        if not text.strip():
+            raise ValueError("No text could be read from this PDF (scanned image?).")
+        return text
     with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
         f.write(data)
         f.flush()

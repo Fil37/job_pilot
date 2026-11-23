@@ -7,3 +7,4 @@ app/instance/*
 app/instance/runs/*
 !app/instance/runs/.keep
 .pytest_cache/
+.ruff_cache/

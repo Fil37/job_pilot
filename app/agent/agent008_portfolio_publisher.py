@@ -35,7 +35,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from app.agent.common_projects import (parse_done_on, IMAGE_TYPES, image_problem, grid_span, grid_titles)  # noqa: F401 - shared, see common_projects.py
+from app.agent.common_projects import (portfolio_token, parse_done_on, IMAGE_TYPES, image_problem, grid_span, grid_titles)  # noqa: F401 - shared, see common_projects.py
 from app.agent import NotFound, BaseAgent, RunContext, db_connect, decode_row, envelope, fold, sha, upsert, utc_now
 from app.agent import supervision as sv
 
@@ -196,14 +196,14 @@ class Agent(BaseAgent):
         for sub in subtasks:
             if not sub.get("kind"):
                 continue
-            git = Git(os.environ.get(cfg["token_env"]) if sub["kind"] != "demo" else None)
+            git = Git(portfolio_token(cfg) if sub["kind"] != "demo" else None)
             try:
                 if sub["kind"] == "demo":
                     done.append(self._demo(ctx, git, cfg, sub["brief_id"]))
                 else:
                     done.append(self._push(ctx, git, cfg, sub["entry_id"], sub["kind"], outcomes))
             except (RuntimeError, ValueError, subprocess.TimeoutExpired, OSError) as exc:
-                msg = sv.redact(str(exc), [os.environ.get(cfg["token_env"], "")])
+                msg = sv.redact(str(exc), [portfolio_token(cfg)])
                 cat = "access_denied" if re.search(r"403|401|denied|Authentication", msg) else "source_unavailable"
                 errors.append({"category": cat, "message": f"{sub['kind']}: {msg[:300]}"})
                 if sub.get("entry_id"):
@@ -330,7 +330,7 @@ class Agent(BaseAgent):
             return "healthy", "pas de portfolio configuré (facultatif) : rien à publier"
         if not shutil.which("git"):
             return "critical", "git absent"
-        if ctx and not os.environ.get(ctx.config["portfolio"]["token_env"]):
+        if ctx and not portfolio_token(ctx.config["portfolio"]):
             return "degraded", (f"{ctx.config['portfolio']['token_env']} absent des secrets : les démos marchent, "
                                 "pas la publication")
         return "healthy", "git présent, jeton configuré"

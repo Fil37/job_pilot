@@ -150,3 +150,45 @@ interchangeables comptent (groupes de `skill_alternative_groups` dans words.json
   déclaré dans `rows.json` sur ses champs : agent009 fait avancer le statut d'une candidature d'après tes mails),
   actions déclarées = actions codées.
 
+## Pour une autre personne : premiers pas
+
+1. `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, puis Tectonic (CV en PDF) et, si possible,
+   poppler-utils (sinon pypdf est utilisé).
+2. Une clé de modèle dans `.env` : `DEEPSEEK_API_KEY=...` (voir `.env.example`).
+3. `.venv/bin/python -m app.web.app` (ou `streamlit run app/web/streamlit_app.py`) : sans configuration, job_pilot démarre
+   avec les exemples, puis la page **Premiers pas** indique ce qui manque et permet :
+   - **Importer ton CV (PDF)** : brouillon de profil ; ton e-mail et ton téléphone sont masqués avant que le modèle lise
+     le CV, chaque phrase du brouillon doit être écrite mot pour mot dans le CV ; tu relis et tu valides ;
+   - **Ta recherche** : postes visés, familles de métiers, contrats, villes, mobilité, salaire, années, mots exclus,
+     entreprises suivies et, si tu en as un, **ton portfolio** (dépôt GitHub Pages et ses catégories). Le lien public de
+     ton portfolio se met dans ton profil (`identity.links.portfolio`) et apparaît sur ton CV.
+
+## En ligne sur Streamlit, pour toi seul
+
+Le code reste le même : l'interface Streamlit (`app/web/streamlit_app.py`) passe par les mêmes actions d'agents. Ton
+dossier d'instance (base, profil, critères, fichiers) est enregistré comme **un instantané chiffré** dans Postgres
+(Neon) ; GitHub Actions fait les tâches automatiques pendant que l'application dort (`.github/workflows/job_pilot.yml`).
+
+1. **Neon** (gratuit) : crée un projet, copie sa chaîne de connexion `postgresql://...?sslmode=require`.
+2. **Clé de chiffrement** : `.venv/bin/python -m app.agent.common_cloud new-key`. Garde-la précieusement (gestionnaire de
+   mots de passe) : sans elle, tes données en ligne sont illisibles, y compris pour toi.
+3. **Première mise en ligne de tes données** (depuis ta machine) :
+   `JOB_PILOT_DATABASE_URL=... JOB_PILOT_SNAPSHOT_KEY=... .venv/bin/python -m app.agent.common_cloud push`
+4. **GitHub** : un dépôt **privé** pour ce dossier (tes données et ton `.env` ne sont jamais versionnés). Dans Settings →
+   Secrets and variables → Actions : `DEEPSEEK_API_KEY`, `JOB_PILOT_DATABASE_URL`, `JOB_PILOT_SNAPSHOT_KEY`, et si besoin
+   `IMAP_PASSWORD`, `PORTFOLIO_TOKEN` (GitHub refuse les secrets nommés `GITHUB_*`). Les chaînes tournent : recherche du
+   jour à 07:30 (heure de Paris en hiver), mails toutes les heures, analyse le lundi ; à la main : Actions → job_pilot →
+   Run workflow.
+5. **Streamlit Community Cloud** : New app → ce dépôt, fichier principal `app/web/streamlit_app.py`, Python 3.12 ;
+   Advanced settings → Secrets (format TOML) : les mêmes clés, plus `JOB_PILOT_APP_PASSWORD = "..."` (mot de passe en
+   plus de l'accès privé). Une application d'un dépôt privé est privée : invite seulement ton adresse.
+6. Ouvre l'application, page **Premiers pas** : tout doit être « prêt » (le portfolio et la boîte mail sont facultatifs).
+
+À savoir : l'application s'endort après 12 h sans visite (réveil d'environ 30 s) ; les alertes mail arrivent au rythme
+d'Actions (toutes les heures, parfois en retard) ; le premier CV compilé en ligne télécharge Tectonic (empreinte
+vérifiée) et ses polices, il prend une à deux minutes. Pendant une tâche automatique, l'interface est en lecture seule ;
+si une tâche a enregistré entre-temps, ta dernière action t'est signalée à refaire (rien n'est écrasé).
+
+Fichiers à la racine propres au déploiement (exceptions à la règle de racine, imposées par les plateformes) :
+`.github/workflows/` (GitHub Actions) et `packages.txt` (paquets système de Streamlit Cloud).
+

@@ -270,6 +270,34 @@ def run_synced(run, *, owner: str, store, folder: Path, lease_s: int = 3600) -> 
         store.release(owner)
 
 
+TECTONIC = {"version": "0.17.0",
+            "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/"
+                   "tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz",
+            "sha256": "8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"}
+
+
+def ensure_tectonic(dest: Path | None = None) -> Path:
+    """Online (Streamlit): Tectonic is downloaded once from its GitHub release and used only if its SHA-256 is the
+    expected one (TECTONIC_CHECKSUM). Returns the binary path."""
+    import hashlib
+    import shutil
+    import stat
+    import urllib.request
+    dest = dest or Path.home() / ".local" / "bin" / "tectonic"
+    if dest.is_file() or shutil.which("tectonic"):
+        return dest if dest.is_file() else Path(shutil.which("tectonic"))
+    with urllib.request.urlopen(TECTONIC["url"], timeout=120) as r:  # noqa: S310 - fixed https URL
+        data = r.read()
+    if hashlib.sha256(data).hexdigest() != TECTONIC["sha256"]:
+        raise RuntimeError("Tectonic download refused: unexpected checksum")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+        binary = tar.extractfile("tectonic").read()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(binary)
+    dest.chmod(dest.stat().st_mode | stat.S_IXUSR)
+    return dest
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="job_pilot snapshot of the instance folder (online deployment)")
     sub = ap.add_subparsers(dest="cmd", required=True)

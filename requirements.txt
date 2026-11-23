@@ -7,3 +7,5 @@ pytest>=8.0           # tests (app/tests) — also runnable without pytest
 # online deployment (Streamlit + Neon + GitHub Actions)
 cryptography>=42      # snapshot of your instance encrypted before it leaves the machine (common_cloud.py)
 psycopg[binary]>=3.2  # Postgres (Neon) store of the snapshot
+pypdf>=5.0            # PDF text and pages when poppler-utils is missing (online)
+streamlit>=1.45       # online interface (app/web/streamlit_app.py)
