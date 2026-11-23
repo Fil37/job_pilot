@@ -60,6 +60,12 @@ SKILLS = [
      "objective": "Vérifier que le CV tient sur une page et que son texte est lisible par les logiciels de tri.",
      "summary": "Contrôles CV_ONE_PAGE (pdfinfo ; espacements resserrés, puis moins de projets) et CV_ATS_TEXT "
                 "(pdftotext retrouve ton nom, ton e-mail, chaque section et chaque ligne, sans caractère illisible)."},
+    {"skill_id": "SK_CV_OFFER_MATCH", "version": "1", "status": "proposed",
+     "objective": "Contrôler la correspondance du CV final avec l'offre, comme un logiciel de tri.",
+     "summary": "Sur le texte du PDF : taux de couverture des compétences demandées, compétences de ton profil oubliées "
+                "(ajoutées par le programme dans « Également » si le CV tient sur une page), compétences absentes de ton "
+                "profil (jamais ajoutées), intitulé de l'offre repris dans ton titre. Contrôle CV_OFFER_MATCH. Section "
+                "« Correspondance du CV avec l'offre » du dossier."},
     {"skill_id": "SK_COVER_LETTER", "version": "1", "status": "proposed",
      "objective": "Rédiger la lettre de motivation sur le même principe quand l'offre la demande.",
      "summary": "Écrite seulement si l'offre mentionne une lettre (ou à ta demande) ; 3 paragraphes courts tirés des "
@@ -70,6 +76,8 @@ AGENT_ID = "agent006"
 CHECKS = [
     ("CV_FACTS_FROM_PROFILE", "chaque chiffre et chaque technologie du CV figure dans profile.yaml", "rule of the user (no invented content)"),
     ("CV_ONE_PAGE", "le CV tient sur une page", "rule of the user"),
+    ("CV_OFFER_MATCH", "le texte final du CV reprend chaque compétence demandée par l'offre que ton profil contient",
+     "demande de l'utilisateur 2026-11-23 : « un QA qui examine le score du CV généré avec l'offre »"),
     ("CV_ATS_TEXT", "le texte du PDF est extractible : nom, e-mail, sections, chaque ligne", "rule of the user (ATS)"),
     ("LETTER_FACTS_FROM_PROFILE", "chaque chiffre et chaque technologie de la lettre figure dans profile.yaml", "rule of the user"),
     ("SUMMARY_WORDS_FROM_PROFILE", "chaque mot porteur de sens du titre, de l'accroche et du profil proposés par le modèle figure "
@@ -268,6 +276,54 @@ def ats_problems(text: str, must: list[str]) -> list[str]:
     return out
 
 
+def cv_offer_match(cv_text: str, req: set[str], have: set[str], lexicon: dict, aliases: dict, offer_title: str,
+                   headline: str) -> dict:
+    """CV_OFFER_MATCH: what a screening software finds of the offer in the FINAL CV text (the PDF text).
+    present = asked skills written in the CV; omitted = asked skills of your profile missing from the CV (fixable);
+    lacking = asked skills you do not have (never added: no invented content); title = domain words of the offer title
+    found in the CV headline."""
+    from app.agent.agent002_offer_collector import domain_tokens
+    t = fold(cv_text)
+
+    def found(skill):
+        return any(contains_term(t, fold(x)) for x in [skill, *lexicon.get(skill, []), *aliases.get(skill, [])])
+    present = sorted(s for s in req if found(s))
+    omitted = sorted(s for s in req if s not in present and s in have)
+    lacking = sorted(s for s in req if s not in present and s not in have)
+    title_words = domain_tokens([offer_title])
+    head = {w.rstrip("s") for w in re.split(r"[^a-z0-9+#]+", fold(headline))}
+    # CV_OFFER_MATCH (real case 2026-11-23, Alice & Bob: "electronic" of an English offer was not seen in your French
+    # title "électronique"): a word counts when both share their beginning, all but their last 2 letters at most
+    # (5 letters at least: "electroni-c" / "electroni-que", "integration" / "intégration")
+    def near(a, b):
+        common = len(os.path.commonprefix([a, b]))
+        return a == b or common >= max(5, min(len(a), len(b)) - 2)
+    title_hit = sorted(w for w in title_words if any(near(w, h) for h in head))
+    return {"coverage": round(100 * len(present) / len(req)) if req else 100,
+            "coverage_reachable": round(100 * len(present) / (len(present) + len(omitted))) if present or omitted else 100,
+            "present": present, "omitted": omitted, "lacking": lacking,
+            "title_words": sorted(title_words), "title_in_headline": title_hit}
+
+
+def match_lines(m: dict) -> list[str]:
+    """French lines of the CV / offer match for the package."""
+    out = [f"- Couverture des compétences demandées : **{m['coverage']} %** ({len(m['present'])} sur "
+           f"{len(m['present']) + len(m['omitted']) + len(m['lacking'])})",
+           f"- Couverture de ce que ton profil permet : {m['coverage_reachable']} %"]
+    if m["present"]:
+        out.append(f"- Présentes dans le CV : {', '.join(m['present'])}")
+    if m.get("added"):
+        out.append(f"- Ajoutées depuis ton profil (elles manquaient au CV) : {', '.join(m['added'])}")
+    if m["omitted"]:
+        out.append(f"- Dans ton profil mais absentes du CV : {', '.join(m['omitted'])} (à ajouter toi-même si tu le souhaites)")
+    if m["lacking"]:
+        out.append(f"- Absentes de ton profil, donc non ajoutées : {', '.join(m['lacking'])}")
+    if m["title_words"]:
+        out.append("- Intitulé de l'offre repris dans ton titre : " + (", ".join(m["title_in_headline"]) if m["title_in_headline"]
+                                                                       else f"non (mots de l'offre : {', '.join(m['title_words'])})"))
+    return out
+
+
 def company_lines(ctx: RunContext, name: str) -> list[str]:
     """The company sheet of agent005 (each fact with its kind and source), or 'missing'."""
     from app.agent.agent005_company_researcher import company_key
@@ -412,7 +468,7 @@ class Agent(BaseAgent):
         # CV_FIT_FEW_PROJECTS (test case 2026-11-21: a profile with 1 project and min_projects 3 gave no attempt at all)
         min_proj = min(ctx.config["cv"]["min_projects"], n_proj)
         plan_fit = [(s, n) for n in range(n_proj, min_proj - 1, -1) for s in range(len(spacing))]
-        for s_i, n in plan_fit[:ctx.config["latex"]["max_fit_iterations"]]:
+        def render(s_i, n, extra_groups=()):
             projects = sel["projects"][:n]
             ctx_tex = {
                 "name": tex(ident["full_name"]), "headline": tex(header["headline"]), "tagline": tex(header["tagline"]),
@@ -423,7 +479,8 @@ class Agent(BaseAgent):
                 "portfolio_label": tex(re.sub(r"^https?://|/$", "", links.get("portfolio", ""))),
                 "github_url": links.get("github", ""), "linkedin_url": links.get("linkedin", ""),
                 "summary": tex(header["summary"]),
-                "skill_groups": [{"label": tex(g["label"]), "text": tex(g["text"])} for g in profile.get("skill_groups") or []],
+                "skill_groups": [{"label": tex(g["label"]), "text": tex(g["text"])}
+                                 for g in [*(profile.get("skill_groups") or []), *extra_groups]],
                 "experiences": [{**e, "role": tex(e["role"]), "company": tex(e["company"]), "city": tex(e["city"]),
                                  "dates": tex(e["dates"]), "bullets": [tex(b) for b in e["bullets"]]} for e in sel["experiences"]],
                 "projects": [{"name": tex(p["name"]), "tags": tex(p["tags"]), "kind_label": tex(p["kind_label"]),
@@ -438,12 +495,17 @@ class Agent(BaseAgent):
                 **spacing[s_i]}
             (folder / "cv.tex").write_text(env.get_template(self._template(ctx, "template").name).render(**ctx_tex),
                                            encoding="utf-8")
-            ok, log = compile_tex(ctx, folder, "cv")
+            done, out = compile_tex(ctx, folder, "cv")
+            return done, out, (pdf_pages(folder / "cv.pdf") if done else 0)
+
+        last = None
+        for s_i, n in plan_fit[:ctx.config["latex"]["max_fit_iterations"]]:
+            ok, log, pages = render(s_i, n)
             if not ok:
                 return envelope(ctx, AGENT_ID, "failed", errors=[{"category": "software_failure",
-                                "message": f"CV compilation failed: {log[-300:]}"}], artifact_refs=[str(folder / "cv.tex")])
-            pages = pdf_pages(folder / "cv.pdf")
+                                "message": f"échec de compilation du CV : {log[-300:]}"}], artifact_refs=[str(folder / "cv.tex")])
             attempts.append({"projects": n, "spacing": spacing[s_i], "pages": pages})
+            last = (s_i, n)
             if pages == 1:
                 break
         kept_projects = sel["projects"][:attempts[-1]["projects"]]
@@ -455,6 +517,29 @@ class Agent(BaseAgent):
         (folder / "cv.txt").write_text(text, encoding="utf-8")
         must = [ident["full_name"], ident.get("email", ""), *SECTIONS,
                 *[b for e in sel["experiences"] for b in e["bullets"]], *[b for p in kept_projects for b in p["bullets"]]]
+        # ---- QA: what a screening software finds of the offer in the final CV (CV_OFFER_MATCH)
+        have = set(skills_p) | {fold(x) for sec in ("experiences", "projects", "education") for it in profile.get(sec) or []
+                                for b in it.get("bullets") or [] for x in b.get("skills") or []}
+        names = {fold(sk["name"]): sk["name"] for sk in profile.get("skills") or []}
+        match = cv_offer_match(text, req, have, lexicon, aliases, offer["title"], header["headline"])
+        match["added"] = []
+        if match["omitted"] and pages == 1:
+            # the program adds them itself: they come from your profile (no invented content), if the CV stays on one page
+            extra = [{"label": "Également", "text": ", ".join(names.get(x, x) for x in match["omitted"])}]
+            ok2, _log2, pages2 = render(*last, extra)
+            if ok2 and pages2 == 1:
+                text = pdf_text(folder / "cv.pdf")
+                added = match["omitted"]
+                match = cv_offer_match(text, req, have, lexicon, aliases, offer["title"], header["headline"])
+                match["added"] = [x for x in added if x in match["present"]]
+            else:
+                render(*last)                      # back to the version that fits on one page
+                text = pdf_text(folder / "cv.pdf")
+        (folder / "cv.txt").write_text(text, encoding="utf-8")
+        outcomes.append({"check": "CV_OFFER_MATCH", "item": oid,
+                         "outcome": "kept_despite" if match["omitted"] else ("corrected" if match["added"] else "pass"),
+                         "detail": f"couverture {match['coverage']} % ; ajoutées {match['added']} ; oubliées "
+                                   f"{match['omitted']} ; absentes du profil {match['lacking']}"})
         ats = ats_problems(text, must)
         outcomes.append({"check": "CV_ATS_TEXT", "item": oid, "outcome": "pass" if not ats else "kept_despite",
                          "detail": "; ".join(ats)[:300]})
@@ -531,6 +616,7 @@ class Agent(BaseAgent):
               f"- Score : {score['score']:.0f} sur 100" if score else "- Score : non calculé",
               f"- CV : {pages} page, texte lisible par les logiciels de tri", f"- Lettre de motivation : {letter_note}",
               "", "## Fiche entreprise", ""] + company_lines(ctx, offer["company"]) + ["",
+              "## Correspondance du CV avec l'offre (contrôle qualité)", ""] + match_lines(match) + ["",
               "## Points de vigilance", ""] + [f"- {v}" for v in vigilance or ["Aucun."]] + [
               "", "## Ce que le modèle a adapté (à relire)", ""] + (
               [f"- {LABELS_FR[k]} : {header[k]}" for k in changed] or ["- Rien : tes formulations d'origine."]) + [
@@ -538,7 +624,7 @@ class Agent(BaseAgent):
               "", "## Et maintenant", "", "Rien n'a été envoyé. Relis le CV, modifie-le si besoin (fichier cv.tex), envoie ta "
               "candidature toi-même, puis clique sur « Marquer comme envoyée » sur la page de l'offre."]
         (folder / "package.md").write_text("\n".join(md) + "\n", encoding="utf-8")
-        (folder / "checks.json").write_text(json.dumps({"outcomes": outcomes, "fit_attempts": attempts}, ensure_ascii=False,
+        (folder / "checks.json").write_text(json.dumps({"outcomes": outcomes, "fit_attempts": attempts, "offer_match": match}, ensure_ascii=False,
                                                        indent=1), encoding="utf-8")
         cv_sha = hashlib.sha256((folder / "cv.pdf").read_bytes()).hexdigest()
         with ctx.connect() as c:
@@ -556,8 +642,10 @@ class Agent(BaseAgent):
         arts = [str(folder / f) for f in ("cv.pdf", "cv.tex", "cv.txt", "package.md")] + ([letter_ref] if letter_ref else [])
         return envelope(ctx, AGENT_ID, status, warnings=warnings + [f"{o['check']}: {o['detail']}"[:200] for o in bad],
                         data={"application_id": app_id, "folder": str(folder), "pages": pages, "letter": letter_note,
-                              "model_changed": changed, "projects": [p["id"] for p in kept_projects]},
+                              "model_changed": changed, "projects": [p["id"] for p in kept_projects],
+                              "offer_match": match},
                         artifact_refs=arts, metrics={"pages": pages, "fit_attempts": len(attempts),
+                                                     "offer_coverage": match["coverage"],
                                                      "corrections": corrections, "kept_despite": len(bad)},
                         sources=[{"kind": "verified_fact", "ref": "profile.yaml"}, {"kind": "verified_fact", "ref": offer["url"]}])
 

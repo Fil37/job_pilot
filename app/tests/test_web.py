@@ -208,5 +208,44 @@ def test_the_interface_is_really_french():
     assert "quotidienne (planificateur)" in page and "(scheduler)" not in page
 
 
+def test_you_can_edit_a_project_idea():
+    """Request of the user 2026-11-23 ("pour le projet j'aimerais pouvoir l'éditer"): the brief page has an edit form;
+    the public summary keeps its rule (BRIEF_PUBLIC_SUMMARY); a valid edit rewrites the file and the row, traced."""
+    import json as _json
+    orch, cl = client()
+    folder = orch.runs_dir / "r_test"
+    folder.mkdir(parents=True)
+    path = folder / "brief_x.md"
+    path.write_text("# Ancien titre\n")
+    brief = {"title": "Ancien titre", "objective": "Un filtre FIR.", "portfolio_summary": "Filtre FIR simulé.",
+             "builds_on": ["vhdl"], "architecture": "a", "hardware": ["PC"], "software": ["GHDL"],
+             "steps": [{"days": "J1", "milestone": "m", "deliverable": "d"}], "success_criteria": ["c"],
+             "pitfalls": ["p"], "interview_pitch": "i"}
+    with sqlite3.connect(orch.db_path) as c:
+        c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) "
+                  "VALUES ('b_e','verilog','Ancien titre',?,?,'proposed','r_test','2026-11-23')", (_json.dumps(brief), str(path)))
+    assert "/docs/brief/b_e/edit" in cl.get("/docs/brief/b_e").data.decode()
+    page = cl.get("/docs/brief/b_e/edit").data.decode()
+    assert 'name="steps"' in page and "J1 | m | d" in page
+    tok = token(cl)
+    form = {"csrf": tok, "title": "Filtre FIR en Verilog sur FPGA", "objective": "Mon objectif à moi.",
+            "builds_on": "vhdl, python", "architecture": "Chaîne ADC puis FIR", "hardware": "DE0-Nano\nCâbles",
+            "software": "Icarus Verilog", "steps": "J1-J2 | Banc de test | tb.v\nJ3 | Synthèse", "success_criteria": "0 erreur",
+            "pitfalls": "timing", "interview_pitch": "Je l'ai conçu.", "portfolio_summary": "Pour apprendre Verilog."}
+    r = cl.post("/docs/brief/b_e/edit", data=form)
+    assert r.status_code == 302 and "error=" in r.headers["Location"]          # 'apprendre' refused on the public card
+    form["portfolio_summary"] = "Filtre FIR en Verilog sur une carte DE0-Nano."
+    assert cl.post("/docs/brief/b_e/edit", data=form).status_code == 302
+    c = sqlite3.connect(orch.db_path)
+    title, saved = c.execute("SELECT title, brief FROM project_briefs WHERE brief_id='b_e'").fetchone()
+    saved = _json.loads(saved)
+    assert title == form["title"] and saved["hardware"] == ["DE0-Nano", "Câbles"] and saved["edited_at"]
+    assert saved["steps"][1] == {"days": "J3", "milestone": "Synthèse", "deliverable": ""}
+    text = path.read_text()
+    assert text.startswith("# Filtre FIR en Verilog sur FPGA") and "Modifié par toi le" in text
+    assert c.execute("SELECT COUNT(*) FROM events WHERE code='user_brief_edit'").fetchone()[0] == 1
+    assert cl.post("/docs/brief/b_e/edit", data={**form, "csrf": "bad"}).status_code == 400
+
+
 if __name__ == "__main__":
     run_main(globals())

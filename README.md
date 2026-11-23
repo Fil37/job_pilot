@@ -98,3 +98,15 @@ ouvre l'offre sur son site, copie tout le texte et colle-le dans « Coller le te
 (événement `user_full_text` tracé), l'offre est rejugée (expérience, score) et une décision que tu avais prise reste.
 Quand la même offre arrive par une autre source avec son texte complet, ce texte remplace aussi l'extrait.
 
+## Contrôle qualité du CV face à l'offre (CV_OFFER_MATCH)
+
+Après compilation, agent006 relit le **texte du PDF** comme un logiciel de tri et écrit dans le dossier la section
+« Correspondance du CV avec l'offre » : taux de couverture des compétences demandées, compétences de ton profil oubliées
+dans le CV (le programme les ajoute lui-même dans une ligne « Également » si le CV tient toujours sur une page),
+compétences absentes de ton profil (jamais ajoutées, seulement signalées) et reprise de l'intitulé de l'offre dans ton titre.
+
+## Modifier un projet proposé
+
+Sur la page d'un projet, « Modifier le projet » ouvre un formulaire avec tous ses champs. Le fichier du brief est réécrit,
+la modification est tracée (`user_brief_edit`) ; seul le résumé public garde sa règle, puisqu'il va sur ton portfolio.
+

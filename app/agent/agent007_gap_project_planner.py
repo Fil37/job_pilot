@@ -65,6 +65,39 @@ missing skill, learning or results not obtained yet."""
 PUBLIC_FORBIDDEN = ("manquant", "lacune", "apprendre", "acquerir la competence", "monter en competence", "missing skill")
 
 
+BRIEF_FIELDS = ("title", "objective", "portfolio_summary", "builds_on", "architecture", "hardware", "software", "steps",
+                "success_criteria", "pitfalls", "interview_pitch")
+
+
+def public_summary_problems(text: str) -> list[str]:
+    """BRIEF_PUBLIC_SUMMARY: words that must not appear on the public portfolio card."""
+    return [w for w in PUBLIC_FORBIDDEN if w in fold(text or "")]
+
+
+def brief_markdown(offer: dict | None, skills: list[str], ans: dict) -> str:
+    """The brief file (also rewritten when you edit the project on its page)."""
+    md = [f"# {ans['title']}", ""]
+    if offer:
+        where = " chez ".join(x for x in (offer.get("title"), offer.get("company")) if x)
+        md += [f"Offre visée : **{where}**" + (f" ({offer['location']})" if offer.get("location") else ""), ""]
+    score = f" (score de l'offre : {offer['score']:.0f}/100)" if offer and offer.get("score") is not None else ""
+    md += [f"Compétence(s) à acquérir : **{', '.join(skills)}**{score}", "",
+           "## Objectif", "", ans["objective"], "", f"S'appuie sur : {', '.join(ans['builds_on'])}", "",
+           "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [f"- {h}" for h in ans["hardware"]] + [
+           "", "## Logiciels", ""] + [f"- {x}" for x in ans["software"]] + ["", "## Étapes et jalons", ""] + [
+           f"- **{st.get('days')}** : {st.get('milestone')}" + (f" (livrable : {st.get('deliverable')})" if st.get("deliverable")
+                                                                else "") for st in ans["steps"]] + [
+           "", "## Critères de réussite", ""] + [f"- {x}" for x in ans["success_criteria"]] + ["", "## Pièges", ""] + [
+           f"- {x}" for x in ans["pitfalls"]] + ["", "## Le présenter en entretien", "", ans["interview_pitch"]]
+    if ans.get("portfolio_summary"):
+        md += ["", "## Résumé public (carte du portfolio)", "", ans["portfolio_summary"]]
+    if offer and offer.get("url"):
+        md += ["", f"Offre : {offer['url']}"]
+    if ans.get("edited_at"):
+        md += ["", f"Modifié par toi le {ans['edited_at'][:16].replace('T', ' ')}."]
+    return "\n".join(md) + "\n"
+
+
 def favourable(r: dict, cfg: dict) -> bool:
     """Rules (1) and (2) of the trigger: green on everything else, 1..max_missing missing skills."""
     return (not r["eliminated"] and r["decision"] in ("keep", "review") and r["score"] >= cfg["min_score"]
@@ -131,18 +164,7 @@ class Agent(BaseAgent):
     def _write(self, ctx, offer, skills, ans, window_days):
         ctx.run_dir.mkdir(parents=True, exist_ok=True)
         path = ctx.run_dir / f"brief_{offer['offer_id']}.md"
-        where = " chez ".join(x for x in (offer["title"], offer.get("company")) if x)
-        md = [f"# {ans['title']}", "", f"Offre visée : **{where}**" + (f" ({offer['location']})" if offer.get("location") else ""),
-              "", f"Compétence(s) à acquérir : **{', '.join(skills)}** (score de l'offre : {offer['score']:.0f}/100)", "",
-              "## Objectif", "", ans["objective"], "", f"S'appuie sur : {', '.join(ans['builds_on'])}", "",
-              "## Architecture", "", ans["architecture"], "", "## Matériel", ""] + [f"- {h}" for h in ans["hardware"]] + [
-              "", "## Logiciels", ""] + [f"- {x}" for x in ans["software"]] + ["", "## Étapes et jalons", ""] + [
-              f"- **{st.get('days')}** : {st.get('milestone')} (livrable : {st.get('deliverable')})" for st in ans["steps"]] + [
-              "", "## Critères de réussite", ""] + [f"- {x}" for x in ans["success_criteria"]] + ["", "## Pièges", ""] + [
-              f"- {x}" for x in ans["pitfalls"]] + ["", "## Le présenter en entretien", "", ans["interview_pitch"]]
-        if offer.get("url"):
-            md += ["", f"Offre : {offer['url']}"]
-        path.write_text("\n".join(md) + "\n", encoding="utf-8")
+        path.write_text(brief_markdown(offer, skills, ans), encoding="utf-8")
         return path
 
     def work(self, ctx: RunContext, subtasks):

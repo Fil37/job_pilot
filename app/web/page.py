@@ -418,6 +418,73 @@ def register(app, orch: Orchestrator) -> None:
         mime = {"pdf": "application/pdf"}.get(name.rsplit(".", 1)[1], "text/plain; charset=utf-8")
         return send_file(path, mimetype=mime)
 
+    # ------------------------------------------------------------------ edit a project idea (agent007 brief)
+    def _brief(brief_id):
+        with db_connect(orch.db_path) as c:
+            row = c.execute("SELECT * FROM project_briefs WHERE brief_id=?", (brief_id,)).fetchone()
+            if not row:
+                abort(404)
+            b = dict(row)
+            offer = None
+            if b.get("offer_id"):
+                o = c.execute("SELECT offer_id, title, company, location, url FROM offers WHERE offer_id=?",
+                              (b["offer_id"],)).fetchone()
+                sc = c.execute("SELECT score FROM scores WHERE offer_id=? ORDER BY scored_at DESC LIMIT 1",
+                               (b["offer_id"],)).fetchone()
+                offer = {**dict(o), "score": sc[0] if sc else None} if o else None
+        b["brief"] = json.loads(b["brief"])
+        path = Path(b["path"]).resolve()
+        if orch.runs_dir.resolve() not in path.parents:
+            abort(404)
+        return b, offer, path
+
+    LIST_FIELDS = ("hardware", "software", "success_criteria", "pitfalls")
+
+    @app.get("/docs/brief/<brief_id>/edit")
+    def brief_edit(brief_id: str):
+        b, offer, _path = _brief(brief_id)
+        ans = b["brief"]
+        form = {k: ans.get(k, "") for k in ("title", "objective", "portfolio_summary", "architecture", "interview_pitch")}
+        form["builds_on"] = ", ".join(ans.get("builds_on") or [])
+        for k in LIST_FIELDS:
+            form[k] = "\n".join(ans.get(k) or [])
+        form["steps"] = "\n".join(" | ".join(str(st.get(x, "")) for x in ("days", "milestone", "deliverable"))
+                                   for st in ans.get("steps") or [] if isinstance(st, dict))
+        doc = {"kind": "brief", "ref": brief_id, "title": ans.get("title", ""), "sections": [], "files": [],
+               "offer_id": b.get("offer_id"), "edit": form, "error": request.args.get("error")}
+        return render_template("job_pilot_page.html", doc=doc)
+
+    @app.post("/docs/brief/<brief_id>/edit")
+    def brief_save(brief_id: str):
+        """You edit the project: every field is yours; only the public summary keeps its rule (BRIEF_PUBLIC_SUMMARY,
+        it goes on your public portfolio). The brief file is rewritten and the edit is traced."""
+        check_csrf()
+        from app.agent.agent007_gap_project_planner import brief_markdown, public_summary_problems
+        b, offer, path = _brief(brief_id)
+        f = {k: (request.form.get(k) or "").replace("\r\n", "\n").strip() for k in
+             ("title", "objective", "portfolio_summary", "architecture", "interview_pitch", "builds_on", "steps", *LIST_FIELDS)}
+        if not f["title"] or not f["objective"] or any(len(v) > 20000 for v in f.values()):
+            return redirect(url_for("brief_edit", brief_id=brief_id, error="A title and an objective are required."))
+        bad = public_summary_problems(f["portfolio_summary"])
+        if bad:
+            return redirect(url_for("brief_edit", brief_id=brief_id,
+                                    error="The public summary must describe what is built: remove " + ", ".join(bad)))
+        steps = []
+        for line in f["steps"].split("\n"):
+            if line.strip():
+                parts = [x.strip() for x in line.split("|")] + ["", ""]
+                steps.append({"days": parts[0], "milestone": parts[1], "deliverable": parts[2]})
+        ans = {**b["brief"], "title": f["title"], "objective": f["objective"], "portfolio_summary": f["portfolio_summary"],
+               "architecture": f["architecture"], "interview_pitch": f["interview_pitch"],
+               "builds_on": [x.strip() for x in f["builds_on"].split(",") if x.strip()], "steps": steps,
+               **{k: [x.strip() for x in f[k].split("\n") if x.strip()] for k in LIST_FIELDS}, "edited_at": utc_now()}
+        path.write_text(brief_markdown(offer, [x.strip() for x in b["skill"].split(",")], ans), encoding="utf-8")
+        with db_connect(orch.db_path) as c:
+            c.execute("UPDATE project_briefs SET title=?, brief=? WHERE brief_id=?",
+                      (ans["title"], json.dumps(ans, ensure_ascii=False), brief_id))
+        orch.store.log_event("info", "user_brief_edit", f"{brief_id}: edited by you", agent_id="user")
+        return redirect(url_for("document", kind="brief", ref=brief_id))
+
     # ------------------------------------------------------------------ documents in the application's look
     @app.get("/docs/<kind>/<ref>")
     def document(kind: str, ref: str):

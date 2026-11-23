@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import EXAMPLE_PROFILE, SCHEMAS, FakeWeb, env_vars, ft_offer, make_orch, run_main  # noqa: E402
 
 from app.agent.agent001_profile_builder import load_profile  # noqa: E402
-from app.agent.agent006_application_builder import (ats_problems, ask_with_corrections, engine, fact_problems,  # noqa: E402
-                                                     novel_words, profile_corpus, tex)
+from app.agent.agent006_application_builder import (ats_problems, ask_with_corrections, cv_offer_match, engine,  # noqa: E402
+                                                     fact_problems, novel_words, profile_corpus, tex)
 
 LEX = SCHEMAS["words"]["skill_lexicon"]
 CORPUS = profile_corpus(load_profile(EXAMPLE_PROFILE))
@@ -94,7 +94,9 @@ def test_full_package_with_a_model_that_invents_then_corrects():
                 "project_order": ids}
 
     with env_vars(FT_CLIENT_ID="id", FT_CLIENT_SECRET="s", DEEPSEEK_API_KEY="test-key"):
-        orch = make_orch(transport=FakeWeb(ft=[ft_offer(1)]))
+        desc = ("Vous construirez des pipelines Python, SQL et Airflow, calculés avec Spark, déployés sur Kubernetes. "
+                "Une première expérience de 1 an est appréciée.")
+        orch = make_orch(transport=FakeWeb(ft=[ft_offer(1, desc=desc)]))
         orch.run("daily")
         oid = sqlite3.connect(orch.db_path).execute("SELECT offer_id FROM offers").fetchone()[0]
         orch_ctx_transport = fake_model(answer)
@@ -118,6 +120,13 @@ def test_full_package_with_a_model_that_invents_then_corrects():
     folder = orch.runs_dir / r["run_id"] / f"application_{oid}"
     assert (folder / "cv.pdf").is_file() and (folder / "package.md").is_file()
     assert "45 %" not in (folder / "cv.txt").read_text() and "30 %" in (folder / "cv.txt").read_text().replace(" ", " ")
+    # CV_OFFER_MATCH (request of the user 2026-11-23): 'spark' is in the profile but in no CV text → added by the
+    # program in "Également"; 'kubernetes' is not in the profile → never added, only reported
+    match = json.loads((folder / "checks.json").read_text())["offer_match"]
+    assert match["added"] == ["spark"] and match["lacking"] == ["kubernetes"] and not match["omitted"], match
+    assert {"python", "sql", "airflow", "spark"} <= set(match["present"]) and "Également" in (folder / "cv.txt").read_text()
+    assert match["coverage"] == 80 and "Kubernetes" not in (folder / "cv.txt").read_text()
+    assert "Correspondance du CV avec l'offre" in (folder / "package.md").read_text()
     c = sqlite3.connect(orch.db_path)
     assert c.execute("SELECT status, cv_version FROM applications").fetchone() == ("ready", r["run_id"])
     calls.clear()
@@ -210,6 +219,18 @@ def test_section_is_projets_and_personal_projects_are_labelled():
     assert r"\project{Tableau de bord de qualité de l'air}{}{Personnel}" in tex_src
     text = (orch.runs_dir / r["run_id"] / f"application_{oid}" / "cv.txt").read_text()
     assert re.search(r"Tableau de bord de qualité de l.air\s+Personnel", text)
+
+
+def test_cv_offer_match_is_computed_on_the_cv_text():
+    """Case (check CV_OFFER_MATCH): coverage over the asked skills, omitted = in the profile but not in the CV text,
+    lacking = not in the profile; aliases count; the offer title's domain word is looked for in the headline."""
+    lexicon = {"python": ["python"], "vhdl": ["vhdl"], "verilog": ["verilog"], "git": ["git"]}
+    m = cv_offer_match("Ingénieur FPGA junior\nVHDL, Python", {"python", "vhdl", "verilog", "git"}, {"python", "vhdl", "git"},
+                       lexicon, {}, "Ingénieur FPGA (H/F)", "Ingénieur FPGA junior")
+    assert (m["present"], m["omitted"], m["lacking"], m["coverage"]) == (["python", "vhdl"], ["git"], ["verilog"], 50)
+    assert m["title_in_headline"] == ["fpga"] and m["coverage_reachable"] == 67
+    m = cv_offer_match("", set(), set(), {}, {}, "Electronics Integration Engineer", "Ingénieur électronique et systèmes embarqués")
+    assert m["title_in_headline"] == ["electronic"] and m["coverage"] == 100
 
 
 if __name__ == "__main__":

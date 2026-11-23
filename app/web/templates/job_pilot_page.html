@@ -33,9 +33,31 @@
       <h1 class="title-clamp">{{ doc.title }}</h1>
     </div>
     <div class="head-actions">
+      {% if doc.kind == 'brief' and not doc.edit %}<a class="button small" href="{{ url_for('brief_edit', brief_id=doc.ref) }}">✎ {{ _('Edit the project') }}</a>{% endif %}
       {% for f in doc.files %}<a class="button small" href="{{ url_for('application_file', application_id=doc.ref, name=f) }}" target="_blank" rel="noopener">{{ _('Open the CV') if f == 'cv.pdf' else _('Open the letter') }}</a>{% endfor %}
     </div>
   </div>
+  {% if doc.edit %}
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Edit the project') }}</h2></div>
+    {% if doc.error %}<p class="badge failed">{{ _(doc.error) }}</p>{% endif %}
+    <form method="post" action="{{ url_for('brief_save', brief_id=doc.ref) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>{{ _('Title') }}<input type="text" name="title" value="{{ doc.edit.title }}" required maxlength="300"></label>
+      <label class="mt-12">{{ _('Objective') }}<textarea name="objective" rows="4" required>{{ doc.edit.objective }}</textarea></label>
+      <label class="mt-12">{{ _('Builds on (comma-separated)') }}<input type="text" name="builds_on" value="{{ doc.edit.builds_on }}"></label>
+      <label class="mt-12">{{ _('Architecture') }}<textarea name="architecture" rows="5">{{ doc.edit.architecture }}</textarea></label>
+      <label class="mt-12">{{ _('Hardware (one per line)') }}<textarea name="hardware" rows="4">{{ doc.edit.hardware }}</textarea></label>
+      <label class="mt-12">{{ _('Software (one per line)') }}<textarea name="software" rows="4">{{ doc.edit.software }}</textarea></label>
+      <label class="mt-12">{{ _('Steps (one per line: days | milestone | deliverable)') }}<textarea name="steps" rows="8">{{ doc.edit.steps }}</textarea></label>
+      <label class="mt-12">{{ _('Success criteria (one per line)') }}<textarea name="success_criteria" rows="4">{{ doc.edit.success_criteria }}</textarea></label>
+      <label class="mt-12">{{ _('Pitfalls (one per line)') }}<textarea name="pitfalls" rows="4">{{ doc.edit.pitfalls }}</textarea></label>
+      <label class="mt-12">{{ _('How to present it in an interview') }}<textarea name="interview_pitch" rows="4">{{ doc.edit.interview_pitch }}</textarea></label>
+      <label class="mt-12">{{ _('Public summary (portfolio card)') }}<textarea name="portfolio_summary" rows="3">{{ doc.edit.portfolio_summary }}</textarea></label>
+      <p class="mt-12"><button type="submit" class="good small">✓ {{ _('Save') }}</button> <a class="button ghost small" href="{{ url_for('document', kind='brief', ref=doc.ref) }}">{{ _('Cancel') }}</a></p>
+    </form>
+  </section>
+  {% endif %}
   {% for sec in doc.sections %}
   <section class="panel doc">
     {% if sec.title %}<div class="panel-title"><h2>{{ sec.title }}</h2></div>{% endif %}
@@ -48,7 +70,7 @@
     <div>
       <p class="crumbs"><a href="{{ url_for('home') }}">← {{ _('Home') }}</a> · {{ _('Offer') }}</p>
       <h1 class="title-clamp">{{ o.title }}</h1>
-      <p class="chips"><span class="chip">{{ o.company }}</span><span class="chip">{{ o.location or '?' }}</span><span class="chip">{{ o.contract or '?' }}</span>{% if o.salary_text %}<span class="chip">{{ o.salary_text }}</span>{% endif %}<span class="chip">{{ o.source_id }}</span></p>
+      <p class="chips"><span class="chip">{{ o.company }}</span><span class="chip">{{ o.location or '?' }}</span><span class="chip">{{ o.contract or '?' }}</span>{% if o.salary_text %}<span class="chip">{{ o.salary_text }}</span>{% endif %}<span class="chip">{{ _(o.source_id) }}</span></p>
     </div>
     <div class="head-actions">
       {% if s %}<span class="badge {{ 'failed' if s.eliminated else 'succeeded' }}">{{ '%.0f'|format(s.score) }}</span>{% endif %}

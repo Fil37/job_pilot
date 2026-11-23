@@ -640,7 +640,7 @@
    "to review": "à vérifier",
    "applications": "candidatures",
    "Score": "Score",
-   "Title": "Intitulé",
+   "Title": "Titre",
    "Company": "Entreprise",
    "Location": "Lieu",
    "Matched": "Satisfait",
@@ -938,7 +938,21 @@
    "no external dependency": "aucune dépendance externe",
    "Favourable offers only (not eliminated, experience keep/review, score >= min_score, 1-2 missing skills); a skill triggers when it is missing in >= min_offers of them and is covered neither by your profile nor by a brief. Computed by the program. Gaps listed on the home page.": "Ancienne version, remplacée par la v2 : tu peux la rejeter.",
    "Objective, architecture, hardware and software, steps and milestones, success criteria, pitfalls, how to present it in an interview; builds on your skills (check BRIEF_STRUCTURE). Notified as an alert; the brief opens from the home page.": "Ancienne version, remplacée par la v2 : tu peux la rejeter.",
-   "enable_source": "activer une source"
+   "enable_source": "activer une source",
+   "Edit the project": "Modifier le projet",
+   "Objective": "Objectif",
+   "Builds on (comma-separated)": "S'appuie sur (séparées par des virgules)",
+   "Architecture": "Architecture",
+   "Hardware (one per line)": "Matériel (un par ligne)",
+   "Software (one per line)": "Logiciels (un par ligne)",
+   "Steps (one per line: days | milestone | deliverable)": "Étapes (une par ligne : jours | jalon | livrable)",
+   "Success criteria (one per line)": "Critères de réussite (un par ligne)",
+   "Pitfalls (one per line)": "Pièges (un par ligne)",
+   "How to present it in an interview": "Le présenter en entretien",
+   "Public summary (portfolio card)": "Résumé public (carte du portfolio)",
+   "Save": "Enregistrer",
+   "Cancel": "Annuler",
+   "A title and an objective are required.": "Un titre et un objectif sont obligatoires."
   }
  },
  "skill_text": {
@@ -1273,6 +1287,10 @@
    [
     "^daily \\+ ",
     "quotidienne + "
+   ],
+   [
+    "^The public summary must describe what is built: remove (.*)$",
+    "Le résumé public doit décrire ce qui est construit : retire \\1"
    ]
   ]
  }
