@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ doc.title if doc else o.title }} · {{ labels.app_title }}</title>
+  <title>{{ _('First steps') if setup else (doc.title if doc else o.title) }} · {{ labels.app_title }}</title>
   <link rel="preload" href="{{ url_for('static', filename='css/Inter.ttf') }}" as="font" type="font/ttf" crossorigin>
   <link rel="icon" href="{{ url_for('static', filename='images/job_pilot_icon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/' ~ labels.css_file) }}">
@@ -16,6 +16,7 @@
   <nav class="side-nav">
     <a href="{{ url_for('home') }}" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8M12 8v8"/></svg><span>{{ _('Home') }}</span></a>
     <a href="{{ url_for('standup') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>{{ _('Supervision') }}</span></a>
+    <a href="{{ url_for('setup') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/></svg><span>{{ _('First steps') }}</span></a>
   </nav>
   <div class="side-foot">
     <span class="lang-switch"><a href="{{ url_for('set_language', code='en', next=request.full_path) }}" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a><a href="{{ url_for('set_language', code='fr', next=request.full_path) }}" {% if lang == 'fr' %}aria-current="true"{% endif %}>FR</a></span>
@@ -25,7 +26,52 @@
 </aside>
 <div class="content">
 <main class="wrap">
-  {% if doc %}
+  {% if setup %}
+  {#- first steps of a new user: checks, CV import → draft profile, criteria -#}
+  <div class="page-head"><div><p class="crumbs"><a href="{{ url_for('home') }}">← {{ _('Home') }}</a></p>
+    <h1>{{ _('First steps') }}</h1></div></div>
+  {% if msg %}<p class="badge {{ 'failed' if error else 'succeeded' }}">{{ _(msg) }}</p>{% endif %}
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Installation check') }}</h2></div>
+    <ul class="list">{% for c in setup.checks %}<li><span class="badge {{ {'ok': 'succeeded', 'missing': 'failed', 'optional': 'plain'}[c.state] }}">{{ _(c.state) }}</span><strong>{{ _(c.item) }}</strong><span class="small faint">{{ c.detail }}</span>{% if c.fix %}<span class="small">{{ _(c.fix) }}</span>{% endif %}</li>{% endfor %}</ul>
+  </section>
+  <section class="panel">
+    <div class="panel-title"><h2>1. {{ _('Your profile from your CV') }}</h2></div>
+    <p class="small">{{ _('Your e-mail and phone are masked before the model reads your CV; every sentence of the draft is written word for word in your CV. Nothing is used before you validate.') }}</p>
+    <form method="post" action="{{ url_for('setup_cv') }}" enctype="multipart/form-data" class="mt-12">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="file" name="cv" accept=".pdf,application/pdf" required>
+      <button type="submit" class="small"{% if busy %} disabled{% endif %}>{{ _('Read my CV') }}</button>
+    </form>
+    <form method="post" action="{{ url_for('setup_profile') }}" class="mt-12">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>{{ _('Your profile (YAML): check every line, then validate') }}<textarea name="yaml" rows="22" class="mono">{{ setup.profile_yaml }}</textarea></label>
+      <p class="mt-12"><button type="submit" class="good small">✓ {{ _('Validate my profile') }}</button></p>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="panel-title"><h2>2. {{ _('Your search') }}</h2></div>
+    <form method="post" action="{{ url_for('setup_criteria') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>{{ _('Target roles (one per line)') }}<textarea name="roles" rows="4" required>{{ setup.crit.roles|join('\n') }}</textarea></label>
+      <fieldset class="mt-12"><legend>{{ _('Job families') }}</legend>{% for f in setup.families %}<label class="inline small"><input type="checkbox" name="title_families" value="{{ f }}"{% if f in setup.crit.title_families %} checked{% endif %}> {{ f }}</label> {% endfor %}</fieldset>
+      <fieldset class="mt-12"><legend>{{ _('Contracts') }}</legend>{% for k in ['CDI', 'CDD', 'INTERIM', 'STAGE', 'ALTERNANCE', 'FREELANCE'] %}<label class="inline small"><input type="checkbox" name="contracts" value="{{ k }}"{% if k in setup.crit.contracts %} checked{% endif %}> {{ k }}</label> {% endfor %}</fieldset>
+      <label class="mt-12">{{ _('Preferred cities (one per line)') }}<textarea name="cities" rows="3">{% for z in setup.crit.zones %}{{ z.label }}
+{% endfor %}</textarea></label>
+      <p class="mt-12"><label class="inline small"><input type="checkbox" name="mobility_france" value="1"{% if setup.crit.mobility_france %} checked{% endif %}> {{ _('Mobile everywhere in France') }}</label>
+        <label class="inline small"><input type="checkbox" name="remote_ok" value="1"{% if setup.crit.remote_ok %} checked{% endif %}> {{ _('Full remote accepted') }}</label></p>
+      <div class="row-2 mt-12"><label>{{ _('Minimum salary (€/year, optional)') }}<input type="number" name="salary_min_eur" value="{{ setup.crit.salary_min_eur or '' }}"></label>
+        <label>{{ _('Maximum years of experience asked') }}<input type="number" name="max_years_required" value="{{ setup.crit.experience_rule.max_years_required if setup.crit.experience_rule else 2 }}"></label></div>
+      <label class="mt-12">{{ _('Excluded words (one per line)') }}<textarea name="excluded_keywords" rows="2">{{ (setup.crit.excluded_keywords or [])|join('\n') }}</textarea></label>
+      <label class="mt-12">{{ _('Companies you follow (one per line: Name | greenhouse:board or lever:id)') }}<textarea name="target_companies" rows="2">{% for t in setup.crit.target_companies or [] %}{{ t.name }} | {{ 'greenhouse:' ~ t.greenhouse if t.greenhouse else 'lever:' ~ t.lever }}
+{% endfor %}</textarea></label>
+      <label class="mt-12">{{ _('Your portfolio repository (optional): https://github.com/you/you.github.io') }}<input type="url" name="portfolio_repo" value="{{ setup.portfolio.repo }}"></label>
+      <label class="mt-12">{{ _('Categories of your portfolio (one per line: key | label)') }}<textarea name="portfolio_categories" rows="3">{% for k, v in setup.portfolio.categories.items() %}{{ k }} | {{ v }}
+{% endfor %}</textarea></label>
+      <p class="mt-12"><button type="submit" class="good small">✓ {{ _('Save my search') }}</button></p>
+    </form>
+  </section>
+  {% elif doc %}
   {#- document mode: package, project brief or interview sheet, rendered from job_pilot's Markdown -#}
   <div class="page-head">
     <div>

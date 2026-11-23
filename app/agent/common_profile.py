@@ -102,3 +102,34 @@ def candidate_target(profile: dict, criteria: dict) -> dict:
     return {"headline": (ident.get("headline_variants") or [""])[0], "target_roles": list(criteria.get("roles") or []),
             "experience_months": months}
 
+
+def pdf_bytes_to_text(data: bytes) -> str:
+    """Text of a PDF (pdftotext, poppler-utils). Raises RuntimeError when the tool is missing or the file unreadable."""
+    import shutil
+    import subprocess
+    import tempfile
+    if not shutil.which("pdftotext"):
+        raise RuntimeError("pdftotext (poppler-utils) is not installed")
+    if not data.startswith(b"%PDF"):
+        raise ValueError("This file is not a PDF.")
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+        f.write(data)
+        f.flush()
+        out = subprocess.run(["pdftotext", "-layout", "-enc", "UTF-8", f.name, "-"], capture_output=True, text=True,
+                             timeout=60)
+    if out.returncode != 0 or not out.stdout.strip():
+        raise ValueError("No text could be read from this PDF (scanned image?).")
+    return out.stdout
+
+
+def squash(text: str) -> str:
+    """CV_IMPORT_VERBATIM comparison form: accents, case, hyphenation at line ends and spacing ignored."""
+    t = re.sub(r"-\s*\n\s*", "", text or "")
+    return re.sub(r"[^a-z0-9%+#]+", " ", fold(t)).strip()
+
+
+def verbatim_in(sentence: str, source_squashed: str) -> bool:
+    """True when the sentence is written (word for word, layout aside) in the source text."""
+    s = squash(sentence.replace("**", ""))
+    return bool(s) and s in source_squashed
+

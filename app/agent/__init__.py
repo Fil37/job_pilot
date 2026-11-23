@@ -26,7 +26,9 @@ from app.agent import supervision as sv
 APP_DIR = Path(__file__).resolve().parents[1]
 ROOT = APP_DIR.parent
 SCHEMAS_DIR = APP_DIR / "schemas"
-INSTANCE_DIR = APP_DIR / "instance"
+# INSTANCE_ELSEWHERE (deployment 2026-11-23): the instance folder (your data) can live outside the code, e.g. on
+# Streamlit or in GitHub Actions: JOB_PILOT_INSTANCE_DIR. Default: app/instance.
+INSTANCE_DIR = Path(os.environ.get("JOB_PILOT_INSTANCE_DIR") or APP_DIR / "instance")
 RUNS_DIR = INSTANCE_DIR / "runs"
 DB_PATH = INSTANCE_DIR / "job_pilot.db"
 INSTANCE_JSON = INSTANCE_DIR / "job_pilot.json"
@@ -40,7 +42,8 @@ try:  # keys (FT_CLIENT_ID...) come from .env, never from a versioned file
 except ImportError:  # pragma: no cover - python-dotenv missing: environment variables only
     pass
 
-SECRET_ENV = ("FT_CLIENT_ID", "FT_CLIENT_SECRET", "DEEPSEEK_API_KEY", "GITHUB_TOKEN", "IMAP_PASSWORD", "FLASK_SECRET_KEY")
+SECRET_ENV = ("FT_CLIENT_ID", "FT_CLIENT_SECRET", "DEEPSEEK_API_KEY", "GITHUB_TOKEN", "PORTFOLIO_TOKEN", "IMAP_PASSWORD",
+              "FLASK_SECRET_KEY", "JOB_PILOT_DATABASE_URL", "JOB_PILOT_SNAPSHOT_KEY", "JOB_PILOT_APP_PASSWORD")
 
 
 def secrets_in_env() -> list[str]:
@@ -129,6 +132,10 @@ def load_instance(path: Path = INSTANCE_JSON) -> dict:
         errs.append(f"{path.name}: secrets are not allowed here (use .env)")
     if errs:
         raise ConfigError("; ".join(errs))
+    # INSTANCE_ELSEWHERE: "app/instance/profile.yaml" means "profile.yaml of the instance folder", wherever it is
+    rel = Path(inst["profile_path"])
+    if not rel.is_absolute() and rel.parts[:2] == ("app", "instance"):
+        inst["profile_path"] = str(INSTANCE_DIR.joinpath(*rel.parts[2:]))
     return inst
 
 

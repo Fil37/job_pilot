@@ -414,3 +414,4 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; margin-right
 .hw:hover .hw-tip, .hw:focus .hw-tip, .hw:focus-within .hw-tip { display: block; }
 .hw-tip b { display: inline-block; min-width: 82px; }
 .panel.hw-panel { overflow: visible; position: relative; z-index: 2; }
+textarea.mono { font-family: ui-monospace, 'Fira Code', monospace; font-size: 12.5px; }

@@ -1005,7 +1005,52 @@
    "To check": "À vérifier",
    "Example": "Exemple",
    "Alternative": "Alternative",
-   "Hardware (one per line: name | role | to check | example | alternative | facultatif)": "Matériel (un par ligne : nom | rôle | à vérifier | exemple | alternative | facultatif)"
+   "Hardware (one per line: name | role | to check | example | alternative | facultatif)": "Matériel (un par ligne : nom | rôle | à vérifier | exemple | alternative | facultatif)",
+   "First steps": "Premiers pas",
+   "Installation check": "Vérification de l'installation",
+   "ok": "prêt",
+   "missing": "à faire",
+   "profile": "profil",
+   "criteria": "critères de recherche",
+   "model key": "clé du modèle",
+   "mailbox (read-only)": "boîte mail (lecture seule)",
+   "Your profile from your CV": "Ton profil à partir de ton CV",
+   "Your e-mail and phone are masked before the model reads your CV; every sentence of the draft is written word for word in your CV. Nothing is used before you validate.": "Ton e-mail et ton téléphone sont masqués avant que le modèle lise ton CV ; chaque phrase du brouillon est écrite mot pour mot dans ton CV. Rien n'est utilisé avant ta validation.",
+   "Read my CV": "Lire mon CV",
+   "Your profile (YAML): check every line, then validate": "Ton profil (YAML) : vérifie chaque ligne, puis valide",
+   "Validate my profile": "Valider mon profil",
+   "Your search": "Ta recherche",
+   "Target roles (one per line)": "Postes visés (un par ligne)",
+   "Job families": "Familles de métiers",
+   "Contracts": "Contrats",
+   "Preferred cities (one per line)": "Villes préférées (une par ligne)",
+   "Mobile everywhere in France": "Mobile partout en France",
+   "Full remote accepted": "Télétravail complet accepté",
+   "Minimum salary (€/year, optional)": "Salaire minimum (€/an, facultatif)",
+   "Maximum years of experience asked": "Années d'expérience demandées au maximum",
+   "Excluded words (one per line)": "Mots exclus (un par ligne)",
+   "Companies you follow (one per line: Name | greenhouse:board or lever:id)": "Entreprises suivies (une par ligne : Nom | greenhouse:tableau ou lever:id)",
+   "Your portfolio repository (optional): https://github.com/you/you.github.io": "Dépôt de ton portfolio (facultatif) : https://github.com/toi/toi.github.io",
+   "Categories of your portfolio (one per line: key | label)": "Catégories de ton portfolio (une par ligne : clé | libellé)",
+   "Save my search": "Enregistrer ma recherche",
+   "Import your CV (PDF) below, check the draft, then validate it.": "Importe ton CV (PDF) ci-dessous, vérifie le brouillon, puis valide-le.",
+   "Import your CV (PDF) below.": "Importe ton CV (PDF) ci-dessous.",
+   "Fill in your search criteria below.": "Renseigne tes critères de recherche ci-dessous.",
+   "Install poppler-utils (packages.txt online).": "Installe poppler-utils (packages.txt en ligne).",
+   "Install Tectonic to compile your CV (downloaded automatically online).": "Installe Tectonic pour compiler ton CV (téléchargé automatiquement en ligne).",
+   "Optional: an app password of your mailbox in IMAP_PASSWORD.": "Facultatif : un mot de passe d'application de ta boîte mail dans IMAP_PASSWORD.",
+   "Draft ready: check it below, then validate.": "Brouillon prêt : vérifie-le ci-dessous, puis valide.",
+   "Draft ready, with points to fix before validating.": "Brouillon prêt, avec des points à corriger avant de valider.",
+   "Profile saved: it is used from the next run.": "Profil enregistré : il est utilisé dès le prochain run.",
+   "Search saved.": "Recherche enregistrée.",
+   "Give at least one target role.": "Indique au moins un poste visé.",
+   "Choose at least one kind of contract.": "Choisis au moins un type de contrat.",
+   "Salary and years must be whole numbers.": "Le salaire et les années doivent être des nombres entiers.",
+   "The portfolio repository must be https://github.com/<you>/<repository>.": "Le dépôt du portfolio doit être https://github.com/<toi>/<dépôt>.",
+   "This file is not a PDF.": "Ce fichier n'est pas un PDF.",
+   "No text could be read from this PDF (scanned image?).": "Aucun texte lisible dans ce PDF (image scannée ?).",
+   "The model is unavailable: check DEEPSEEK_API_KEY in your secrets.": "Le modèle est indisponible : vérifie DEEPSEEK_API_KEY dans tes secrets.",
+   "Remove 'example_profile: true': the profile must hold your own data.": "Retire « example_profile: true » : le profil doit contenir tes propres données."
   }
  },
  "skill_text": {
@@ -1344,6 +1389,18 @@
    [
     "^The public summary must describe what is built: remove (.*)$",
     "Le résumé public doit décrire ce qui est construit : retire \\1"
+   ],
+   [
+    "^Profile not valid: (.*)$",
+    "Profil non valide : \\1"
+   ],
+   [
+    "^YAML error: (.*)$",
+    "Erreur YAML : \\1"
+   ],
+   [
+    "^The CV could not be read reliably: (.*)$",
+    "Le CV n'a pas pu être lu de façon fiable : \\1"
    ]
   ]
  },

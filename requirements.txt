@@ -4,3 +4,6 @@ python-dotenv>=1.0    # keys read from .env (never versioned)
 pyyaml>=6.0           # profile source file (app/instance/profile.yaml)
 pytest>=8.0           # tests (app/tests) — also runnable without pytest
 # System tools needed later: latexmk + a TeX distribution (agent006, step 7), pdftotext (poppler-utils, present).
+# online deployment (Streamlit + Neon + GitHub Actions)
+cryptography>=42      # snapshot of your instance encrypted before it leaves the machine (common_cloud.py)
+psycopg[binary]>=3.2  # Postgres (Neon) store of the snapshot

@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -38,7 +39,7 @@ if __package__ in (None, ""):  # launched as a script: make the project root imp
 
 from app.agent import (DB_PATH, INSTANCE_DIR, INSTANCE_JSON, RUNS_DIR, SCHEMA_VERSION, ConfigError, RunContext,
                        db_connect, ensure_business_tables, envelope, load_instance, load_schemas, merge_config,
-                       secrets_in_env, upsert, utc_now)
+                       fold, secrets_in_env, upsert, utc_now)
 from app.agent import supervision as sv
 
 AGENT_ID = "agent000"
@@ -123,12 +124,17 @@ def check_skills(agent_id: str, skills) -> list[str]:
 
 class Orchestrator:
     def __init__(self, *, db_path: Path = DB_PATH, schemas: dict | None = None, instance: dict | None = None,
-                 runs_dir: Path = RUNS_DIR, transport=None, backup: bool = True):
+                 runs_dir: Path = RUNS_DIR, transport=None, backup: bool = True, instance_dir: Path | None = None):
         self.schemas = schemas or load_schemas()
+        if instance is None and not INSTANCE_JSON.exists():
+            bootstrap_instance()                     # FIRST_RUN: a new user starts from the examples
         self.instance = instance if instance is not None else load_instance(INSTANCE_JSON)
         self.config = merge_config(self.schemas["settings"], self.instance)
         self.registry = Registry(self.schemas["routes"])
         self.db_path, self.runs_dir, self.transport = Path(db_path), Path(runs_dir), transport
+        # OWN_INSTANCE_DIR (real case 2026-11-23: a test wrote a draft profile into the REAL instance folder): every file
+        # an action writes goes to THIS orchestrator's instance folder (the real one only when loaded from it)
+        self.instance_dir = Path(instance_dir) if instance_dir else (INSTANCE_DIR if instance is None else self.runs_dir.parent)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.store = sv.SupervisionStore(self.db_path, secrets=secrets_in_env())
         ensure_business_tables(self.db_path, self.schemas["rows"])
@@ -449,7 +455,118 @@ def action_mark_alerts_seen(orch, *, alert_id: int | None = None, category: str 
     return {"event": "alert_seen", "detail": f"{alert_id or f'{category}:{ref}'}"}
 
 
-USER_ACTIONS = {"mark_alerts_seen": action_mark_alerts_seen}
+def bootstrap_instance() -> list[str]:
+    """FIRST_RUN (another user, 2026-11-23): without job_pilot.json / profile.yaml, start from the examples (the example
+    profile is flagged and refused for applications); the 'Premiers pas' page then replaces them with yours."""
+    import secrets as _secrets
+    assets = Path(__file__).resolve().parents[1] / "assets"
+    INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+    (INSTANCE_DIR / "runs").mkdir(exist_ok=True)
+    created = []
+    if not INSTANCE_JSON.exists():
+        inst = json.loads((assets / "job_pilot.example.json").read_text(encoding="utf-8"))
+        inst["instance_id"] = f"job_pilot-{_secrets.token_hex(4)}"
+        inst["profile_path"] = "app/instance/profile.yaml"
+        INSTANCE_JSON.write_text(json.dumps(inst, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        created.append(INSTANCE_JSON.name)
+    prof = INSTANCE_DIR / "profile.yaml"
+    if not prof.exists():
+        prof.write_text((assets / "profile.example.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+        created.append(prof.name)
+    return created
+
+
+def setup_checks(orch) -> list[dict]:
+    """FIRST_STEPS: what a new user needs, each with how to fix it. state: ok | missing | optional."""
+    from app.agent.agent001_profile_builder import check_profile
+    from app.agent.common_profile import load_profile
+    out = []
+
+    def add(item, ok, detail, fix="", optional=False):
+        out.append({"item": item, "state": "ok" if ok else ("optional" if optional else "missing"), "detail": detail,
+                    "fix": "" if ok else fix})
+    path = Path(orch.instance["profile_path"])
+    try:
+        prof = load_profile(path)
+        problems = check_profile(prof)[0]
+        add("profile", not prof.get("example_profile") and not problems,
+            "example profile (not yours)" if prof.get("example_profile") else
+            ("; ".join(problems[:3]) if problems else f"{len(prof.get('experiences') or [])} experience(s)"),
+            "Import your CV (PDF) below, check the draft, then validate it.")
+    except Exception as exc:  # noqa: BLE001 - shown to the user, never hidden
+        add("profile", False, f"{type(exc).__name__}: {exc}", "Import your CV (PDF) below.")
+    crit = orch.instance.get("criteria") or {}
+    add("criteria", bool(crit.get("roles")) and crit.get("roles") != ["data engineer", "data scientist"],
+        ", ".join(crit.get("roles") or []) or "no target role", "Fill in your search criteria below.")
+    llm = orch.config["llm"]
+    add("model key", bool(os.environ.get(llm["api_key_env"])), llm["api_key_env"],
+        f"Put your {llm['provider']} key in {llm['api_key_env']} (.env locally, secrets online).")
+    add("pdftotext / pdfinfo", bool(shutil.which("pdftotext") and shutil.which("pdfinfo")), "poppler-utils",
+        "Install poppler-utils (packages.txt online).")
+    eng = orch.config["latex"].get("engine_path") or "tectonic"
+    add("LaTeX (Tectonic)", bool(shutil.which(eng) or Path(os.path.expanduser(eng)).is_file()), eng,
+        "Install Tectonic to compile your CV (downloaded automatically online).")
+    mb = (orch.instance.get("external_refs") or {}).get("mailbox") or {}
+    add("mailbox (read-only)", bool(mb.get("host") and mb.get("user") and os.environ.get(mb.get("password_env", "IMAP_PASSWORD"))),
+        mb.get("host") or "not configured", "Optional: an app password of your mailbox in IMAP_PASSWORD.", optional=True)
+    pf = orch.config["portfolio"]
+    add("portfolio", bool(pf.get("repo")) and bool(os.environ.get(pf["token_env"])), pf.get("repo") or "not configured",
+        f"Optional: your GitHub Pages repository below, and a token in {pf['token_env']}.", optional=True)
+    return out
+
+
+def action_save_criteria(orch, *, form: dict) -> dict:
+    """Your search criteria and your portfolio, edited from the interface; the previous file is archived."""
+    def lines(k):
+        return [x.strip() for x in str(form.get(k) or "").replace("\r", "").split("\n") if x.strip()]
+    roles = lines("roles")
+    if not roles:
+        raise ValueError("Give at least one target role.")
+    families = [f for f in form.get("title_families") or [] if f in orch.schemas["words"].get("title_families", {})]
+    contracts = [c for c in form.get("contracts") or [] if c in ("CDI", "CDD", "INTERIM", "STAGE", "ALTERNANCE", "FREELANCE")]
+    if not contracts:
+        raise ValueError("Choose at least one kind of contract.")
+    try:
+        salary = int(form["salary_min_eur"]) if str(form.get("salary_min_eur") or "").strip() else None
+        years = int(form.get("max_years_required") or 2)
+    except ValueError:
+        raise ValueError("Salary and years must be whole numbers.") from None
+    zones = [{"label": c, "keywords": [fold(c)]} for c in lines("cities")]
+    targets = []
+    for ln in lines("target_companies"):
+        name, _, ref = (x.strip() for x in ln.partition("|"))
+        kind, _, ident = ref.partition(":")
+        if kind.strip() in ("greenhouse", "lever") and ident.strip():
+            targets.append({"name": name, kind.strip(): ident.strip()})
+    path = orch.instance_dir / "job_pilot.json"
+    inst = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else json.loads(json.dumps(orch.instance))
+    crit = inst.setdefault("criteria", {})
+    crit.update({"roles": roles, "title_families": families, "contracts": contracts, "salary_min_eur": salary,
+                 "zones": zones, "mobility_france": bool(form.get("mobility_france")), "remote_ok": bool(form.get("remote_ok")),
+                 "excluded_keywords": lines("excluded_keywords"), "target_companies": targets})
+    crit.setdefault("experience_rule", {})["max_years_required"] = years
+    repo = str(form.get("portfolio_repo") or "").strip()
+    if repo and not re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+(\.git)?", repo):
+        raise ValueError("The portfolio repository must be https://github.com/<you>/<repository>.")
+    cats = {}
+    for ln in lines("portfolio_categories"):
+        key, _, label = (x.strip() for x in ln.partition("|"))
+        if key:
+            cats[key] = label or key
+    inst.setdefault("overrides", {})["portfolio"] = {**(inst["overrides"].get("portfolio") or {}), "repo": repo,
+                                                     "categories": cats}
+    if path.is_file():                           # archived, never overwritten without a copy
+        archive = orch.instance_dir / "config_archive"
+        archive.mkdir(exist_ok=True)
+        (archive / f"job_pilot_{utc_now().replace(':', '')}.json").write_text(path.read_text(encoding="utf-8"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(inst, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    orch.instance = load_instance(path)
+    orch.config = merge_config(orch.schemas["settings"], orch.instance)
+    return {"event": "user_criteria_saved", "detail": f"{len(roles)} role(s), {len(zones)} place(s)"}
+
+
+USER_ACTIONS = {"mark_alerts_seen": action_mark_alerts_seen, "save_criteria": action_save_criteria}
 
 
 def run_standalone(agent_id: str) -> int:
@@ -465,7 +582,22 @@ def main(argv=None) -> int:
     p.add_argument("--list", action="store_true", help="list agents, chains and skills")
     p.add_argument("--offer", help="offer id for the application chain (agent006)")
     p.add_argument("--letter", action="store_true", help="write a cover letter even if the offer does not ask")
+    p.add_argument("--sync", action="store_true", help="online: lease, restore the snapshot, run, save it (GitHub Actions)")
     a = p.parse_args(argv)
+    if a.sync:                                   # SNAPSHOT_SYNC (common_cloud.py)
+        from app.agent import INSTANCE_DIR
+        from app.agent import common_cloud as cloud
+        store = cloud.store_from_env()
+        if store is None:
+            print("JOB_PILOT_DATABASE_URL missing: --sync needs the online store", file=sys.stderr)
+            return 2
+
+        def synced_run():
+            orch = Orchestrator(backup=False)
+            orch.startup()
+            return orch.run(a.chain, only=a.only, skip=a.skip, title=f"{chain_label(a.chain or 'only')} (GitHub Actions)")
+        return cloud.run_synced(synced_run, owner=f"actions-{os.environ.get('GITHUB_RUN_ID', os.getpid())}",
+                                store=store, folder=INSTANCE_DIR)
     try:
         orch = Orchestrator()
         orch.startup()

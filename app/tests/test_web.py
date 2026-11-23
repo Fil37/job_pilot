@@ -338,5 +338,18 @@ def test_without_a_portfolio_nothing_about_publishing_is_shown():
              "summary": "S"}, categories=[], figures=[])
 
 
+def test_first_steps_page():
+    """The 'Premiers pas' page shows the installation check, the CV import and the criteria; forms need the token;
+    a wrong YAML is refused with its message, nothing is written."""
+    orch, cl = client()
+    page = cl.get("/setup").data.decode()
+    assert 'action="/setup/cv"' in page and 'name="roles"' in page and "Vérification de l&#39;installation" in page
+    assert cl.post("/setup/profile", data={"yaml": "x"}).status_code == 400
+    r = cl.post("/setup/profile", data={"csrf": token(cl), "yaml": "identity: [unclosed"})
+    assert "error=1" in r.headers["Location"]
+    r = cl.post("/setup/criteria", data={"csrf": token(cl), "roles": "Data engineer", "contracts": ["CDI"]})
+    assert "error" not in r.headers["Location"]
+
+
 if __name__ == "__main__":
     run_main(globals())

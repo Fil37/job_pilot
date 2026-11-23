@@ -322,7 +322,8 @@
  "user_actions": {
   "_doc": "USER_ACTIONS: what the interface may ask, per owning agent (agent000.act); nothing else writes the business tables.",
   "agent000": [
-   "mark_alerts_seen"
+   "mark_alerts_seen",
+   "save_criteria"
   ],
   "agent002": [
    "add_manual_offer",
@@ -342,6 +343,10 @@
   ],
   "agent008": [
    "request_publication"
+  ],
+  "agent001": [
+   "import_cv",
+   "save_profile"
   ]
  }
 }

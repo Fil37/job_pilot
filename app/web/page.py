@@ -569,6 +569,53 @@ def register(app, orch: Orchestrator) -> None:
                "offer_id": row[1], "offer": offer, "when": path.stat().st_mtime, "hardware": hardware}
         return render_template("job_pilot_page.html", doc=doc)
 
+    # ------------------------------------------------------------------ first steps (another user, 2026-11-23)
+    @app.get("/setup")
+    def setup():
+        from app.agent.agent000_job_pilot import setup_checks
+        draft = orch.instance_dir / "profile.draft.yaml"
+        prof = Path(orch.instance["profile_path"])
+        text = draft.read_text(encoding="utf-8") if draft.is_file() else (prof.read_text(encoding="utf-8")
+                                                                         if prof.is_file() else "")
+        data = {"checks": setup_checks(orch), "profile_yaml": text, "crit": orch.instance.get("criteria") or {},
+                "families": sorted(orch.schemas["words"].get("title_families", {})), "portfolio": orch.config["portfolio"]}
+        return render_template("job_pilot_page.html", setup=data, msg=request.args.get("msg"),
+                               error=request.args.get("error") == "1", busy=bool(orch.busy()))
+
+    @app.post("/setup/cv")
+    def setup_cv():
+        check_csrf()
+        up = request.files.get("cv")
+        if not up or not up.filename:
+            abort(400)
+        try:
+            r = orch.act("agent001", "import_cv", pdf=up.read())
+        except (ValueError, RuntimeError) as exc:
+            return redirect(url_for("setup", msg=str(exc), error=1))
+        return redirect(url_for("setup", msg="Draft ready: check it below, then validate." if not r["problems"]
+                                else "Draft ready, with points to fix before validating."))
+
+    @app.post("/setup/profile")
+    def setup_profile():
+        check_csrf()
+        try:
+            orch.act("agent001", "save_profile", yaml_text=request.form.get("yaml") or "")
+        except ValueError as exc:
+            return redirect(url_for("setup", msg=str(exc), error=1))
+        (orch.instance_dir / "profile.draft.yaml").unlink(missing_ok=True)
+        return redirect(url_for("setup", msg="Profile saved: it is used from the next run."))
+
+    @app.post("/setup/criteria")
+    def setup_criteria():
+        check_csrf()
+        form = {**request.form.to_dict(), "title_families": request.form.getlist("title_families"),
+                "contracts": request.form.getlist("contracts")}
+        try:
+            orch.act("agent000", "save_criteria", form=form)
+        except ValueError as exc:
+            return redirect(url_for("setup", msg=str(exc), error=1))
+        return redirect(url_for("setup", msg="Search saved."))
+
     # ------------------------------------------------------------------ supervision
     @app.get("/standup")
     def standup():

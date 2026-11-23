@@ -24,6 +24,27 @@ _busy = sv.busy_runs(DB_PATH)
 if _busy:
     raise SystemExit(f"refusing to run the tests: real run(s) in progress {_busy}")
 
+# REAL_INSTANCE_UNTOUCHED (real case 2026-11-23: a test wrote a draft profile into the real instance folder): the
+# files of YOUR instance must be exactly the same after the tests (the base and the runs are excluded: the scheduler
+# of a running interface may write them meanwhile).
+_REAL = DB_PATH.parent
+_WATCH = ("job_pilot.json", "profile.yaml", "profile.draft.yaml", "config_archive", "profile_archive")
+
+
+def _real_state() -> dict:
+    return {n: (_REAL / n).stat().st_mtime_ns if (_REAL / n).exists() else None for n in _WATCH}
+
+
+_REAL_BEFORE = _real_state()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    after = _real_state()
+    changed = [n for n in _WATCH if after[n] != _REAL_BEFORE[n]]
+    if changed:
+        session.exitstatus = 1
+        print(f"\nREAL_INSTANCE_UNTOUCHED failed: the tests changed {changed} in {_REAL}")
+
 EXAMPLE_PROFILE = ROOT / "app/assets/profile.example.yaml"
 _EXAMPLE_JSON = ROOT / "app/assets/job_pilot.example.json"
 # The harness profile (app/harness.yaml) copies only .py files and the five schemas: the example instance is read
