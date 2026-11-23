@@ -43,6 +43,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 
 | Source | Accès | État |
 |---|---|---|
+| Arbeitnow (API publique gratuite, sans clé) | 3 pages de 300 offres au plus par jour, texte complet ; tous les pays gardés, l'étranger est marqué « hors de France » au score | active |
 | France Travail (pages publiques) | pages métier × département des plans du site officiels (tous les départements avec `mobility_france`, tes zones d'abord, 200 requêtes au plus) ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; extraits seulement | active |
 | France Travail (API) | fermée aux nouvelles applications depuis 2026-10 (data.gouv.fr) ; tes identifiants n'obtiennent que le droit « application » | désactivée |
 | Offres collées à la main | formulaire de l'accueil (LinkedIn, Indeed, tout site) | active |

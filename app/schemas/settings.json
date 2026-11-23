@@ -163,6 +163,15 @@
     "tos_status": "public_job_board_api",
     "note": "Public postings API of companies using Lever (companies in job_pilot.json)."
    },
+   "arbeitnow": {
+    "enabled": true,
+    "kind": "open_api",
+    "tos_status": "free_public_api",
+    "checked_on": "2026-11-23",
+    "max_pages": 3,
+    "rules": "Free public API without key (https://www.arbeitnow.com/api/job-board-api): 'please do not abuse', a link back to the site is appreciated; robots.txt forbids nothing. Read: at most max_pages pages of 300 offers (newest first), 1 request/s; only offers whose title matches your search are kept, every country (your choice 2026-11-23: 'garde tout'); full description given.",
+    "note": "Mostly Germany, London, Switzerland, Netherlands; about 1 offer in 8 in France. Each offer links back to arbeitnow.com."
+   },
    "hellowork": {
     "enabled": false,
     "kind": "site",

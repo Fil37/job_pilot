@@ -83,5 +83,17 @@ def test_a_technology_written_in_the_profile_is_known():
     assert "linux" not in s["missing"] and {"skill": "linux", "level": "working"} in s["matched"]
 
 
+def test_a_place_counts_as_france_only_when_recognised():
+    """Real case 2026-11-23 (check FRANCE_POSITIVE): an Arbeitnow offer in 'Hamburg' scored 1.0 'France' because only
+    foreign places were listed. Now: unknown place outside a French-only source → outside; France Travail places,
+    département numbers and known French cities → France."""
+    crit = dict(CRIT, mobility_france=True)
+    loc = lambda **k: score_offer(offer(**k), "keep", TERMS, PROFILE, crit, W, SCORING)
+    assert "LOCATION_OUTSIDE" in loc(location="Hamburg", source_id="arbeitnow")["elimination_reasons"]
+    assert loc(location="Aubervilliers", source_id="france_travail_web")["components"]["values"]["location"] == 1.0
+    assert loc(location="Bordeaux, France", source_id="arbeitnow")["components"]["values"]["location"] == 1.0
+    assert loc(location="Grenoble", source_id="lever")["components"]["values"]["location"] == 1.0
+
+
 if __name__ == "__main__":
     run_main(globals())

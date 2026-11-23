@@ -59,6 +59,8 @@ CHECKS = [
      "2026-11-21: France Travail forbids keyword search (*motsCles=*) to robots; HelloWork, Meteojob, WTTJ forbid scraping"),
     ("SOURCE_INTERNAL_DUPLICATES", "one offer per external id inside a source",
      "2026-11-21 test: France Travail returns the same offer for several title queries"),
+    ("TITLE_SHORT_SKILL", "a skill shorter than 3 letters never selects a title on its own",
+     "2026-11-23, Arbeitnow: your skill 'c' kept 'Product Manager Insurance P&C' and C#/.NET jobs"),
     ("FT_ALL_DEPARTMENTS", "with mobility_france, every département page of your métiers is read (your zones first)",
      "2026-11-23: 90 % of the offers came from Île-de-France and Haut-Rhin although you are mobile in all France"),
 ]
@@ -254,7 +256,10 @@ def fetch_france_travail(ctx: RunContext, http: Http, terms: dict) -> tuple[list
 
 GENERIC_TITLE_WORDS = {"ingenieur", "engineer", "developpeur", "developer", "concepteur", "conception", "test", "tests",
                        "et", "de", "des", "en", "logiciel", "software", "systeme", "systemes", "system", "design",
-                       "developpement", "validation", "essais", "h/f", "f/h", "senior", "junior", "lead"}
+                       "developpement", "validation", "essais", "h/f", "f/h", "senior", "junior", "lead",
+                       # TITLE_DOMAIN_TOKENS (real case 2026-11-23, Arbeitnow: "Digital Designer" and "digital marketing"
+                       # kept through 'digital design engineer'): words that also name marketing / IT transformation jobs
+                       "digital", "numerique"}
 
 
 def domain_tokens(titles: list[str]) -> set[str]:
@@ -267,7 +272,10 @@ def _title_wanted(title: str, terms: dict) -> bool:
     # TITLE_DOMAIN_TOKENS (real case 2026-11-21, Alice & Bob "Electronics Integration Engineer" was skipped because
     # no full title such as "electronics engineer" appears in it): a domain word of your titles is enough.
     f = fold(title)
-    if any(t in f for t in terms["title"]) or any(re.search(rf"\b{re.escape(k)}\b", f) for k in terms["core_skill"]):
+    # TITLE_SHORT_SKILL (real case 2026-11-23, Arbeitnow: your skill 'c' kept "Product Manager Insurance P&C" and C#/.NET
+    # jobs): a skill shorter than 3 letters never selects a title on its own.
+    if any(t in f for t in terms["title"]) or any(re.search(rf"\b{re.escape(k)}\b", f) for k in terms["core_skill"]
+                                                 if len(k) >= 3):
         return True
     words = {w.rstrip("s") for w in re.split(r"[^a-z0-9+#]+", f)}       # singular / plural
     return bool(words & domain_tokens(terms["title"]))
@@ -453,8 +461,31 @@ def fetch_france_travail_web(ctx: RunContext, http: Http, terms: dict) -> tuple[
     return out, len(paths)
 
 
+def fetch_arbeitnow(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:
+    """Arbeitnow free public API: pages of 300 offers, newest first, full description; every country kept."""
+    spec = ctx.config["sources"]["arbeitnow"]
+    out, pages = [], 0
+    for page in range(1, int(spec.get("max_pages", 3)) + 1):
+        data = http.json("GET", f"https://www.arbeitnow.com/api/job-board-api?page={page}") or {}
+        pages += 1
+        for j in data.get("data", []):
+            if not _title_wanted(j.get("title", ""), terms):
+                continue
+            created = j.get("created_at")
+            loc = (j.get("location") or "").strip() or ("Remote" if j.get("remote") else None)
+            out.append(make_offer(ctx.words, source_id="arbeitnow", external_id=j.get("slug"), title=j.get("title"),
+                                  company=j.get("company_name"), url=j.get("url"),
+                                  description=html_to_text(j.get("description", "")), location=loc,
+                                  contract=", ".join(j.get("job_types") or []) or None,
+                                  published_at=datetime.fromtimestamp(int(created), timezone.utc).isoformat(timespec="seconds")
+                                  if str(created or "").isdigit() else None))
+        if not (data.get("links") or {}).get("next"):
+            break
+    return out, pages
+
+
 FETCHERS = {"manual": fetch_manual, "france_travail": fetch_france_travail, "france_travail_web": fetch_france_travail_web,
-            "greenhouse": fetch_greenhouse, "lever": fetch_lever}
+            "greenhouse": fetch_greenhouse, "lever": fetch_lever, "arbeitnow": fetch_arbeitnow}
 
 
 # =========================================================================== agent

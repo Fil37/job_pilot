@@ -55,6 +55,19 @@ def offer_skills(text: str, lexicon: dict, profile_skills: dict, aliases: dict) 
     return found
 
 
+def in_france(offer: dict, loc: str, criteria: dict, words: dict) -> bool:
+    """FRANCE_POSITIVE (real case 2026-11-23: Arbeitnow offers in 'Hamburg' or 'Dortmund' would have counted as France
+    because only a list of foreign places was checked): a place counts as France when the source only publishes French
+    offers, or the place shows a département number, 'France', one of your zones or a known French city."""
+    if offer.get("source_id") in words.get("france_only_sources", []):
+        return True
+    if re.search(r"(^|[\s,(])(\d{2}|2a|2b|97\d)\s*-\s", loc):
+        return True
+    places = list(words.get("french_places", [])) + [k for z in criteria.get("zones") or [] for k in z.get("keywords", [])
+                                                     if not k.isdigit()]
+    return any(contains_term(loc, fold(p)) for p in places)
+
+
 def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria: dict, words: dict, scoring: dict) -> dict:
     text = fold(f"{offer['title']}\n{offer['description']}")
     title = fold(offer["title"])
@@ -87,7 +100,7 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
         comp["location"], notes["location"] = 1.0, zone
     elif remote and scoring.get("remote_counts_as_in_zone", True):
         comp["location"], notes["location"] = 1.0, "télétravail complet"
-    elif criteria.get("mobility_france") and loc and not foreign:
+    elif criteria.get("mobility_france") and loc and not foreign and in_france(offer, loc, criteria, words):
         # MOBILITY_FRANCE (your CV 2026-11-21: "Mobilité France, dont Mulhouse"; your rule 2026-11-23: "je suis mobile
         # dans toute la France, ne restreins pas à Orsay"): anywhere in France scores like your zones; abroad stays out.
         comp["location"], notes["location"] = 1.0, "France (mobile partout)"
@@ -156,6 +169,9 @@ class Agent(BaseAgent):
     def work(self, ctx: RunContext, subtasks):
         ctx.store.register_check("SCORE_IS_WEIGHTED_SUM", AGENT_ID, "score = 100 x weighted sum of the components",
                                  "rule of the method: every displayed figure is computed by the program")
+        ctx.store.register_check("FRANCE_POSITIVE", AGENT_ID, "a place counts as France only when recognised (French-only "
+                                 "source, département number, 'France', your zones, known French city)",
+                                 "2026-11-23: Arbeitnow offers in Hamburg or Dortmund would have scored 'France'")
         prof = self._profile(ctx)
         profile = json.loads(prof["summary"])
         scoring = ctx.config["scoring"]

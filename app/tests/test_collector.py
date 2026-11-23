@@ -203,5 +203,42 @@ def test_mobility_france_reads_every_departement():
     although you are mobile in all France; with mobility_france the Rhône page is read too, after your zones."""
     test_france_travail_pages_source_reads_only_allowed_pages(mobility=True)
 
+def test_arbeitnow_keeps_every_country_with_full_text():
+    """Choice of the user 2026-11-23 ('garde tout'): the Arbeitnow offers matching your titles are kept whatever the
+    country, with their full description; pagination stops when there is no next page; other titles are dropped."""
+    import json as _json
+    import tempfile
+    from conftest import make_instance
+    page = {"data": [
+        {"slug": "fpga-munich-1", "company_name": "Chip GmbH", "title": "FPGA Engineer (m/w/d)", "remote": False,
+         "description": "<p>Design in <b>VHDL</b>, 0-2 years</p>", "url": "https://www.arbeitnow.com/jobs/x/fpga-munich-1",
+         "job_types": ["Unbefristeter arbeitsvertrag"], "location": "Munich", "created_at": 1795411828},
+        {"slug": "fpga-paris-2", "company_name": "Puce SAS", "title": "Ingénieur FPGA", "remote": False,
+         "description": "<p>VHDL</p>", "url": "https://www.arbeitnow.com/jobs/y/fpga-paris-2", "job_types": [],
+         "location": "Paris", "created_at": 1795411828},
+        {"slug": "designer-3", "company_name": "Agentur", "title": "Digital Designer", "remote": False,
+         "description": "x", "url": "https://www.arbeitnow.com/jobs/z/designer-3", "job_types": [], "location": "Hamburg",
+         "created_at": 1795411828}], "links": {"next": None}}
+    calls = []
+
+    def web(method, url, headers, data, timeout):
+        calls.append(url)
+        return (200, _json.dumps(page)) if "arbeitnow.com/api/job-board-api" in url else (404, "")
+    tmp = Path(tempfile.mkdtemp())
+    inst = make_instance(tmp, roles=["ingénieur FPGA"], title_families=["fpga"], mobility_france=True)
+    inst["overrides"] = {"sources": {k: {"enabled": k == "arbeitnow"} for k in
+                                     ("manual", "greenhouse", "lever", "france_travail", "france_travail_web", "arbeitnow")}}
+    orch = make_orch(tmp, transport=web, instance=inst)
+    r = orch.run(None, only=["agent001", "agent002", "agent003", "agent004"])
+    assert r["results"]["agent002"]["new"] == 2 and calls == ["https://www.arbeitnow.com/api/job-board-api?page=1"]
+    c = sqlite3.connect(orch.db_path)
+    got = dict(c.execute("SELECT location, description FROM offers").fetchall())
+    assert "VHDL" in got["Munich"] and "<" not in got["Munich"]
+    assert c.execute("SELECT contract FROM offers WHERE location='Munich'").fetchone()[0] == "CDI"
+    # FRANCE_POSITIVE: Munich stays outside France (traceable reason), Paris counts as one of your places
+    rows = dict(c.execute("SELECT o.location, s.eliminated FROM scores s JOIN offers o USING(offer_id)").fetchall())
+    assert rows == {"Munich": 1, "Paris": 0}
+
+
 if __name__ == "__main__":
     run_main(globals())
