@@ -100,7 +100,8 @@ def test_alerts_projects_and_publication_request():
     (demo / "index.html").write_text("<html>demo</html>")
     with c:
         c.execute("INSERT INTO alerts(kind,category,message,created_at) VALUES ('immediate','interview','Entretien ACME','t')")
-        c.execute("INSERT INTO project_briefs VALUES ('b_1','kafka','Projet Kafka','{}','x','proposed','r9','2026-11-21')")
+        c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) "
+                  "VALUES ('b_1','kafka','Projet Kafka','{}','x','proposed','r9','2026-11-21')")
         c.execute("INSERT INTO portfolio_entries(entry_id,brief_id,slug,demo_path,status,run_id,updated_at) VALUES "
                   "('p_1','b_1','projet-kafka',?,'demo','r9','t')", (str(demo / "index.html"),))
     html = cl.get("/").data.decode()

@@ -249,7 +249,8 @@
    "agent002",
    "agent003",
    "agent004",
-   "agent005"
+   "agent005",
+   "agent007"
   ],
   "rescore": [
    "agent001",
@@ -261,8 +262,7 @@
    "agent010"
   ],
   "weekly": [
-   "agent011",
-   "agent007"
+   "agent011"
   ],
   "application": [
    "agent005",

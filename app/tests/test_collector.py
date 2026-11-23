@@ -151,7 +151,7 @@ def test_france_travail_listing_is_parsed_including_offers_without_employer():
     assert (b["company"], b["location"]) == ("Entreprise non communiquée", "92 - Boulogne-Billancourt")
 
 
-def test_france_travail_pages_source_reads_only_allowed_pages():
+def test_france_travail_pages_source_reads_only_allowed_pages(mobility=False):
     """Case: the connector reads robots.txt first, then the sitemaps and the métier pages of your titles (national +
     your départements); keyword search is never requested; titles outside your search are not kept."""
     import tempfile
@@ -179,7 +179,7 @@ def test_france_travail_pages_source_reads_only_allowed_pages():
         return 404, ""
     tmp = Path(tempfile.mkdtemp())
     inst = make_instance(tmp, roles=["ingénieur électronique"], title_families=["electronics"],
-                         zones=[{"label": "Essonne", "keywords": ["essonne", "91"]}])
+                         zones=[{"label": "Essonne", "keywords": ["essonne", "91"]}], mobility_france=mobility)
     inst["overrides"] = {"sources": {"manual": {"enabled": False}, "greenhouse": {"enabled": False},
                                      "lever": {"enabled": False}, "france_travail": {"enabled": False},
                                      "france_travail_web": {"enabled": True}}}
@@ -188,10 +188,20 @@ def test_france_travail_pages_source_reads_only_allowed_pages():
     # the same job on the national page and on the Essonne page: stored once, the second one merged as an alias
     assert (r["results"]["agent002"]["new"], r["results"]["agent002"]["merged"]) == (1, 1), r["results"]["agent002"]
     assert calls[0].endswith("/robots.txt") and not any("motsCles" in u for u in calls)
-    assert not any("boulanger" in u or "technico" in u or "rhone" in u for u in calls)
+    assert not any("boulanger" in u or "technico" in u for u in calls)
     titles = [t for (t,) in sqlite3.connect(orch.db_path).execute("SELECT title FROM offers")]
     assert titles == ["Ingénieur électronicien (H/F)"]
+    rhone = [i for i, u in enumerate(calls) if "rhone" in u]
+    if mobility:                                      # FT_ALL_DEPARTMENTS: your zones first, then every other one
+        assert rhone and rhone[0] > next(i for i, u in enumerate(calls) if u.endswith("d91"))
+    else:
+        assert not rhone
 
+
+def test_mobility_france_reads_every_departement():
+    """Real case 2026-11-23 (check FT_ALL_DEPARTMENTS): 90 % of the offers came from Île-de-France and Haut-Rhin
+    although you are mobile in all France; with mobility_france the Rhône page is read too, after your zones."""
+    test_france_travail_pages_source_reads_only_allowed_pages(mobility=True)
 
 if __name__ == "__main__":
     run_main(globals())

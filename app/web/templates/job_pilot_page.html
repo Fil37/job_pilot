@@ -121,6 +121,13 @@
   </section>
   {% endif %}
 
+  {% for b in briefs %}
+  <section class="panel">
+    <div class="panel-title"><h2>{{ _('Project idea') }}</h2><span class="badge plain">{{ b.skill }}</span></div>
+    <p class="chips"><a class="button small" href="{{ url_for('document', kind='brief', ref=b.brief_id) }}">{{ b.title }}</a></p>
+  </section>
+  {% endfor %}
+
   {% for a in apps %}
   <section class="panel">
     <div class="panel-title"><h2>{{ _('Application package') }}</h2><span class="badge {{ 'succeeded' if a.status != 'ready' else 'partial' }}">{{ _(a.status) }}</span></div>

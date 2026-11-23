@@ -59,6 +59,8 @@ CHECKS = [
      "2026-11-21: France Travail forbids keyword search (*motsCles=*) to robots; HelloWork, Meteojob, WTTJ forbid scraping"),
     ("SOURCE_INTERNAL_DUPLICATES", "one offer per external id inside a source",
      "2026-11-21 test: France Travail returns the same offer for several title queries"),
+    ("FT_ALL_DEPARTMENTS", "with mobility_france, every département page of your métiers is read (your zones first)",
+     "2026-11-23: 90 % of the offers came from Île-de-France and Haut-Rhin although you are mobile in all France"),
 ]
 LEGAL = r"\b(sas|sasu|sa|sarl|eurl|sca|gmbh|ltd|inc|group|groupe|france)\b"
 GENDER = r"\(?\b[hf]\s*/\s*[fh]\b\)?|\(?\bf\s*/\s*h\b\)?|\(?\bm\s*/\s*f\b\)?|\(?\bw\s*/\s*m\b\)?|\bh/f/x\b"
@@ -386,7 +388,7 @@ def parse_ft_listing(page: str, words: dict, now=None) -> list[dict]:
 
 def fetch_france_travail_web(ctx: RunContext, http: Http, terms: dict) -> tuple[list[dict], int]:
     spec = ctx.config["sources"]["france_travail_web"]
-    http.left = min(http.left, spec.get("max_requests", http.left)) if spec.get("max_requests") else http.left
+    http.left = spec.get("max_requests") or http.left        # the source's own budget replaces the generic one
     status, robots = http.request("GET", f"{FT_WEB}/robots.txt", headers={"Accept": "text/plain"})
     if status != 200:
         raise SourceError("source_unavailable", f"robots.txt HTTP {status}: nothing read")
@@ -413,16 +415,28 @@ def fetch_france_travail_web(ctx: RunContext, http: Http, terms: dict) -> tuple[
             national.setdefault(mm.group(2), []).append(mm.group(1))
     if not national:
         raise SourceError("missing_data", "no France Travail métier page matches your titles")
-    depts = sorted({k for z in ctx.instance["criteria"].get("zones", []) for k in z.get("keywords", [])
-                    if re.fullmatch(r"\d{2}", k)})
+    criteria = ctx.instance["criteria"]
+    depts = sorted({k for z in criteria.get("zones", []) for k in z.get("keywords", []) if re.fullmatch(r"\d{2}", k)})
+    everywhere = bool(criteria.get("mobility_france"))
     paths = [p for ps in national.values() for p in ps]
-    if depts:
+    if depts or everywhere:
+        # FT_ALL_DEPARTMENTS (real case 2026-11-23: 90 % of the offers came from Île-de-France and Haut-Rhin although
+        # you are mobile in all France): a national page only shows its latest offers, so with mobility_france every
+        # department page is read; your zones first, so a short budget still covers them.
         cross = get("/rechercheoffre/sitemap/croisements-metiers-departements.xml") or ""
         firsts = {slug: ps[0].rsplit("/", 1)[1] for slug, ps in national.items()}
+        mine, others = [], []
         for u in re.findall(r"<loc>([^<]+)</loc>", cross):
             mm = re.match(re.escape(FT_WEB) + r"(/offres/emploi/([a-z0-9-]+)/[a-z0-9-]+/(s\d+m\d+)d(\d{2}))$", u)
-            if mm and firsts.get(mm.group(2)) == mm.group(3) and mm.group(4) in depts:
-                paths.append(mm.group(1))
+            if mm and firsts.get(mm.group(2)) == mm.group(3):
+                if mm.group(4) in depts:
+                    mine.append(mm.group(1))
+                elif everywhere:
+                    others.append(mm.group(1))
+        paths += mine + others
+        if everywhere:
+            ctx.store.record_outcomes(ctx.run_id, [{"check": "FT_ALL_DEPARTMENTS", "outcome": "pass",
+                                                    "detail": f"{len(mine)} page(s) of your zones, {len(others)} elsewhere"}])
     out = []
     for path in paths:
         if http.left <= 0:

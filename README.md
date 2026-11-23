@@ -3,7 +3,7 @@
 Suit ta recherche d'emploi de bout en bout : trouve les offres, les filtre, les classe, prépare les candidatures,
 comble les lacunes et suit les réponses. **Rien n'est jamais envoyé vers l'extérieur sans ta validation.**
 
-Version 0.3 (2026-11-21) : les 12 agents sont construits et actifs (profil, collecte, filtre d'expérience,
+Version 0.4 (2026-11-23) : les 12 agents sont construits et actifs (profil, collecte, filtre d'expérience,
 score, récapitulatif, interface, supervision). L'interface lance un planificateur : chaîne quotidienne à 07:30, boîte mail toutes les 15 minutes, analyse
 hebdomadaire le lundi, publications de portfolio dues toutes les heures (tant que l'application tourne).
 
@@ -33,7 +33,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 | agent004_offer_scorer | score = somme pondérée, satisfait / manques, éliminations avec raison | construit |
 | agent005_company_researcher | fiche entreprise : registre officiel (API Recherche d'entreprises), Wikipédia, signal de recrutement ; chaque fait sourcé | construit |
 | agent006_application_builder | CV LaTeX (Tectonic), lettre si demandée, paquet ; DeepSeek propose titre / accroche / résumé, le programme vérifie (faits du profil, 1 page, ATS) | construit |
-| agent007_gap_project_planner | lacunes sur 30 jours, 4 règles de déclenchement calculées → brief de projet (DeepSeek, vérifié) | construit |
+| agent007_gap_project_planner | chaque offre favorable à laquelle il manque 1 ou 2 compétences reçoit son propre brief de projet (DeepSeek, vérifié), dans la chaîne quotidienne, 3 au plus par passage ; les compétences les plus demandées sur 30 jours restent affichées | construit |
 | agent008_portfolio_publisher | démo de ton vrai portfolio avec la carte ; publication datée et retrait après validation (index.html seulement, entre balises) | construit |
 | agent009_inbox_tracker | Gmail en lecture seule (IMAP EXAMINE + BODY.PEEK), rattachement, classement avec confiance, alertes ; aucun corps de mail stocké | construit (attend IMAP_PASSWORD) |
 | agent010_followup_coach | fiche d'entretien, proposition d'agenda (.ics après validation), brouillon de relance (jamais envoyé) | construit |
@@ -43,7 +43,7 @@ Autres lancements : `app/agent/run --chain rescore` (refiltrer et reclasser), `-
 
 | Source | Accès | État |
 |---|---|---|
-| France Travail (pages publiques) | pages métier × département des plans du site officiels ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; extraits seulement | active |
+| France Travail (pages publiques) | pages métier × département des plans du site officiels (tous les départements avec `mobility_france`, tes zones d'abord, 200 requêtes au plus) ; `robots.txt` relu à chaque passage (recherche par mots-clés interdite aux robots : jamais demandée) ; 1 requête/s ; sans connexion ni cookie ; extraits seulement | active |
 | France Travail (API) | fermée aux nouvelles applications depuis 2026-10 (data.gouv.fr) ; tes identifiants n'obtiennent que le droit « application » | désactivée |
 | Offres collées à la main | formulaire de l'accueil (LinkedIn, Indeed, tout site) | active |
 | Greenhouse, Lever | API publiques de job boards des entreprises cibles (Alice & Bob) | active |

@@ -292,6 +292,8 @@ def register(app, orch: Orchestrator) -> None:
             mails = [dict(r) for r in c.execute(f"SELECT * FROM email_events WHERE application_id IN ({q}) ORDER BY received_at DESC", ids)]
             sheets = [dict(r) for r in c.execute(f"SELECT * FROM interview_sheets WHERE application_id IN ({q})", ids)]
             drafts = [dict(r) for r in c.execute(f"SELECT * FROM followup_drafts WHERE application_id IN ({q})", ids)]
+            briefs = [dict(r) for r in c.execute("SELECT brief_id, skill, title, status FROM project_briefs WHERE offer_id=?",
+                                                 (offer_id,))]
         company = {"facts": json.loads(comp[0]), "confidence": comp[1], "updated_at": comp[2]} if comp else None
         for sh in sheets:
             pth = Path(sh["path"])
@@ -310,7 +312,7 @@ def register(app, orch: Orchestrator) -> None:
                  {"name": "Application", "state": ("succeeded" if any(a["status"] != "ready" for a in apps)
                                                    else "partial") if apps else "pending"}]
         return render_template("job_pilot_page.html", o=o, d=d, s=s, aliases=aliases, steps=steps, apps=apps, company=company,
-                               mails=mails, sheets=sheets, drafts=drafts,
+                               mails=mails, sheets=sheets, drafts=drafts, briefs=briefs,
                                run=dict(run) if run else None, busy=bool(orch.busy()), msg=request.args.get("msg"))
 
     @app.post("/offers/<offer_id>/decision")
@@ -384,7 +386,7 @@ def register(app, orch: Orchestrator) -> None:
     def document(kind: str, ref: str):
         """Package, project brief or interview sheet rendered in the job_pilot page (instead of raw text)."""
         queries = {"package": "SELECT package_ref || '/package.md', offer_id FROM applications WHERE application_id=?",
-                   "brief": "SELECT path, NULL FROM project_briefs WHERE brief_id=?",
+                   "brief": "SELECT path, offer_id FROM project_briefs WHERE brief_id=?",
                    "sheet": "SELECT s.path, a.offer_id FROM interview_sheets s JOIN applications a USING(application_id) "
                             "WHERE s.sheet_id=?"}
         if kind not in queries:

@@ -225,8 +225,9 @@ class Orchestrator:
         if calls:                                   # agent000 files the model calls of the task (socle rule)
             self.store.record_llm_calls(calls)
             env["metrics"]["llm_calls"] = len(calls)
-        if took > self.config["timeouts_s"]["agent_default"]:
-            env["warnings"].append(f"took {took:.0f} s (limit {self.config['timeouts_s']['agent_default']} s)")
+        limit = self.config["timeouts_s"].get(aid, self.config["timeouts_s"]["agent_default"])
+        if took > limit:
+            env["warnings"].append(f"took {took:.0f} s (limit {limit} s)")
             self.store.open_incident(agent_id=aid, category="timeout", errors=[f"took {took:.0f} s"], run_id=ctx.run_id,
                                      task_id=ctx.task_id)
         for e in env["errors"]:

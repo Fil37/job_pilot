@@ -13,11 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import SCHEMAS, env_vars, make_instance, make_orch, run_main  # noqa: E402
 
 from app.agent.agent005_company_researcher import best_registry_match, company_key  # noqa: E402
-from app.agent.agent007_gap_project_planner import window_gaps  # noqa: E402
+from app.agent import upsert  # noqa: E402
+from app.agent.agent007_gap_project_planner import offers_to_brief, window_gaps  # noqa: E402
 from app.agent.agent008_portfolio_publisher import Git, card_html, insert_card, remove_card  # noqa: E402
 from app.agent.agent011_pipeline_analyst import propose_weights  # noqa: E402
 
-GAPS = {"window_days": 30, "min_score": 55, "min_offers": 3, "max_missing": 2}
+GAPS = {"window_days": 30, "min_score": 55, "max_missing": 2, "max_briefs_per_run": 3}
 BRIEF = {"title": "Bus CAN sur STM32 avec <script>", "objective": "Apprendre Kafka & co.",
          "portfolio_summary": "Chaîne de messages Kafka & co. entre un PC et une carte.", "builds_on": ["python", "sql"],
          "architecture": "Producteur Python → Kafka → consommateur", "hardware": ["PC"], "software": ["Kafka"],
@@ -35,6 +36,75 @@ def test_trigger_rules_are_computed_by_the_program():
             {"offer_id": "e", "score": 80, "missing": ["kafka", "rust", "go"], "eliminated": 0, "decision": "keep"},
             {"offer_id": "f", "score": 80, "missing": ["kafka"], "eliminated": 0, "decision": "reject"}]
     assert window_gaps(rows, GAPS) == {"kafka": ["a", "b"], "rust": ["b"]}
+
+
+
+def test_one_project_per_favourable_offer():
+    """Rule of the user 2026-11-23 ("le projet à ajouter pour chaque offre"): a single favourable offer is enough, each
+    offer gets its own brief (best score first), an offer already briefed (even dismissed) is not proposed again, an
+    offer whose missing skill is in the profile is skipped, only the latest score of an offer counts."""
+    rows = [{"offer_id": "a", "score": 70, "missing": ["kafka"], "eliminated": 0, "decision": "keep", "scored_at": "1"},
+            {"offer_id": "b", "score": 90, "missing": ["kafka", "rust"], "eliminated": 0, "decision": "review", "scored_at": "1"},
+            {"offer_id": "c", "score": 80, "missing": ["verilog"], "eliminated": 0, "decision": "keep", "scored_at": "1"},
+            {"offer_id": "d", "score": 85, "missing": ["python"], "eliminated": 0, "decision": "keep", "scored_at": "1"},
+            {"offer_id": "e", "score": 95, "missing": ["kafka"], "eliminated": 0, "decision": "keep", "scored_at": "1"},
+            {"offer_id": "e", "score": 40, "missing": ["kafka"], "eliminated": 0, "decision": "keep", "scored_at": "2"}]
+    todo = offers_to_brief(rows, GAPS, own={"python"}, briefed_offers={"c"})
+    assert [r["offer_id"] for r in todo] == ["b", "a"]
+
+
+def seed_offer(c, rows, oid, score, missing):
+    now = "2099-01-01T00:00:00+00:00"
+    upsert(c, rows, "offers", {"offer_id": oid, "dedup_key": oid, "title": f"Ingénieur FPGA {oid}", "company": "ACME",
+           "location": "31 - Toulouse", "description": "Conception FPGA en VHDL et Verilog.", "url": f"https://x/{oid}",
+           "source_id": "manual", "external_id": oid, "status": "new", "first_seen_run": "r0", "first_seen_at": now,
+           "last_seen_at": now})
+    upsert(c, rows, "experience_decisions", {"offer_id": oid, "profile_hash": "h", "run_id": "r0", "decision": "keep",
+           "reason_code": "OK", "reason": "ok", "candidate_years": 1, "excludes_internship": False,
+           "excludes_apprenticeship": False, "confidence": 1, "decided_at": now})
+    upsert(c, rows, "scores", {"offer_id": oid, "profile_hash": "h", "weights_version": "1", "run_id": "r0", "score": score,
+           "components": {}, "matched": [], "missing": missing, "eliminated": False, "elimination_reasons": [],
+           "scored_at": now})
+
+
+def test_agent007_writes_one_brief_per_offer_linked_to_it():
+    """Case: two favourable offers missing 'verilog' → two briefs, each with its offer_id and an alert; a second run
+    proposes nothing more."""
+    tmp = Path(tempfile.mkdtemp())
+    orch = make_orch(tmp)
+    with sqlite3.connect(orch.db_path) as c:
+        for oid, sc in (("o1", 80), ("o2", 70)):
+            seed_offer(c, orch.schemas["rows"], oid, sc, ["verilog"])
+    brief = dict(BRIEF, title="Filtre FIR en Verilog", objective="Un filtre FIR en Verilog simulé.",
+                 portfolio_summary="Filtre FIR en Verilog simulé avec Icarus.", software=["Icarus Verilog"])
+    from app.agent import agent000_job_pilot as a0
+    original = a0.Orchestrator._ctx
+    asked = []
+
+    def ctx_with_model(self, *a, **k):
+        ctx = original(self, *a, **k)
+
+        def transport(url, headers, body, timeout):
+            asked.append(json.loads(body["messages"][-1]["content"]))
+            return 200, {"choices": [{"message": {"content": json.dumps(brief)}}],
+                         "usage": {"prompt_tokens": 100, "completion_tokens": 50}}
+        ctx.llm_transport = transport
+        return ctx
+    a0.Orchestrator._ctx = ctx_with_model
+    try:
+        with env_vars(DEEPSEEK_API_KEY="test-key-long"):
+            r = orch.run(None, only=["agent007"])
+            r2 = orch.run(None, only=["agent007"])
+    finally:
+        a0.Orchestrator._ctx = original
+    assert r["results"]["agent007"]["briefs"] == 2, r["results"]["agent007"]
+    assert r2["results"]["agent007"]["briefs"] == 0
+    c = sqlite3.connect(orch.db_path)
+    got = c.execute("SELECT offer_id, skill, path FROM project_briefs ORDER BY offer_id").fetchall()
+    assert [(o, s) for o, s, _ in got] == [("o1", "verilog"), ("o2", "verilog")]
+    assert "Offre visée : **Ingénieur FPGA o1 chez ACME** (31 - Toulouse)" in Path(got[0][2]).read_text()
+    assert asked[0]["offer"]["title"] == "Ingénieur FPGA o1" and asked[0]["target_skills"] == ["verilog"]
+    assert c.execute("SELECT COUNT(*) FROM alerts WHERE category='project'").fetchone()[0] == 2
 
 
 def test_card_is_escaped_and_insert_remove_touch_only_the_block():
@@ -67,7 +137,8 @@ def portfolio_orch(tmp: Path):
     inst["overrides"]["portfolio"] = {"repo": str(bare)}
     orch = make_orch(tmp, instance=inst)
     with sqlite3.connect(orch.db_path) as c:
-        c.execute("INSERT INTO project_briefs VALUES ('b_1','kafka',?,?,'x','proposed','r0','now')",
+        c.execute("INSERT INTO project_briefs (brief_id, skill, title, brief, path, status, run_id, created_at) "
+                  "VALUES ('b_1','kafka',?,?,'x','proposed','r0','now')",
                   (BRIEF["title"], json.dumps(BRIEF)))
     return orch, bare
 

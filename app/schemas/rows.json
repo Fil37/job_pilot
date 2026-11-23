@@ -875,6 +875,10 @@
     "created_at": {
      "type": "text",
      "required": true
+    },
+    "offer_id": {
+     "type": "text",
+     "required": false
     }
    }
   },

@@ -88,9 +88,9 @@ def score_offer(offer: dict, decision: str, terms: dict, profile: dict, criteria
     elif remote and scoring.get("remote_counts_as_in_zone", True):
         comp["location"], notes["location"] = 1.0, "télétravail complet"
     elif criteria.get("mobility_france") and loc and not foreign:
-        # MOBILITY_FRANCE (your CV 2026-11-21: "Mobilité France, dont Mulhouse"): anywhere in France is accepted,
-        # your preferred areas score higher; a foreign location stays outside.
-        comp["location"], notes["location"] = 0.8, "France (mobility)"
+        # MOBILITY_FRANCE (your CV 2026-11-21: "Mobilité France, dont Mulhouse"; your rule 2026-11-23: "je suis mobile
+        # dans toute la France, ne restreins pas à Orsay"): anywhere in France scores like your zones; abroad stays out.
+        comp["location"], notes["location"] = 1.0, "France (mobile partout)"
     elif not loc or loc in ("france", "fr", "remote"):
         comp["location"], notes["location"] = 0.5, "lieu non précisé"
     else:
