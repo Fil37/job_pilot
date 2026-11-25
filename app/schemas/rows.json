@@ -971,6 +971,31 @@
      "required": true
     }
    }
+  },
+  "mail_cursor": {
+   "owner": "agent009",
+   "primary_key": [
+    "mailbox"
+   ],
+   "description": "MAIL_CURSOR: last mail examined per mailbox (UIDVALIDITY + UID), so each run only fetches the new mails",
+   "fields": {
+    "mailbox": {
+     "type": "text",
+     "required": true
+    },
+    "uidvalidity": {
+     "type": "text",
+     "required": true
+    },
+    "last_uid": {
+     "type": "integer",
+     "required": true
+    },
+    "updated_at": {
+     "type": "text",
+     "required": true
+    }
+   }
   }
  }
 }

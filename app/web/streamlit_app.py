@@ -482,7 +482,7 @@ def page_supervision() -> None:
     st.subheader(f"Validations en attente ({len(apps)})")
     for a in apps:
         c1, c2, c3 = st.columns([6, 1, 1])
-        c1.markdown(f"**{tr(a['action'])}** · `{a['target']}`")
+        c1.markdown(f"**{md(tr(a['action']))}** · `{a['target']}`")
         for col, label, ok in ((c2, "Approuver", True), (c3, "Rejeter", False)):
             if col.button(label, key=f"ap{a['approval_id']}{ok}"):
                 try:
@@ -493,12 +493,22 @@ def page_supervision() -> None:
                 st.rerun()
     st.subheader(f"Incidents ouverts ({len(data['incidents'])})")
     for i in data["incidents"]:
-        c1, c2 = st.columns([7, 1])
-        c1.markdown(f"**{i['agent']}** · {tr(i['error_category'])} · {i['message'][:300]}")
-        if c2.button("Résolu", key=f"inc{i['id']}"):
-            o.store.close_incident(i["id"], "resolved")
-            save_online()
-            st.rerun()
+        # INCIDENT_AS_TEXT (real case 2026-11-25: a LaTeX log with a line of '====' turned into a huge Markdown title):
+        # one translated, escaped summary line; the raw technical log in a folded code block
+        msg = str(i["message"] or "")
+        first = next((ln.strip() for ln in msg.splitlines() if ln.strip()), "")
+        with st.container(border=True):
+            c1, c2 = st.columns([7, 1], vertical_alignment="center")
+            with c1:
+                st.badge(tr(i["error_category"]), color="red")
+                st.markdown(f"**{md(i['agent'])}** · {md(tr(i['agent']))} · {md(tr(first))[:240]}")
+                if msg.strip() != first:
+                    with st.expander("Détail technique"):
+                        st.code(msg[:4000], language=None)
+            if c2.button("Résolu", key=f"inc{i['id']}"):
+                o.store.close_incident(i["id"], "resolved")
+                save_online()
+                st.rerun()
     st.subheader("Runs récents")
     st.dataframe([{"run": tr(r.get("title") or r["run_id"]), "statut": tr(r["status"]),
                    "résumé": tr(json.loads(r["totals"]).get("summary", "")) if r.get("totals") else ""}

@@ -28,10 +28,16 @@ class FakeIMAP:
         self.calls.append(("select", box, readonly))
         return "OK", [b"1"]
 
+    def response(self, code):
+        return code, [b"42"] if code == "UIDVALIDITY" else [None]
+
     def uid(self, cmd, *args):
         self.calls.append(("uid", cmd) + args)
         if cmd == "SEARCH":
-            return "OK", [" ".join(str(i + 1) for i in range(len(self.messages))).encode()]
+            first = int(args[1].split()[1].split(":")[0]) if args[1].startswith("UID ") else 1
+            # like a real server, "UID n:*" returns the last UID even when n is beyond it
+            found = ([i + 1 for i in range(len(self.messages)) if i + 1 >= first] or [len(self.messages)]) if self.messages else []
+            return "OK", [" ".join(str(i) for i in found).encode()]
         if cmd == "FETCH":
             assert "BODY.PEEK" in args[1] and "STORE" not in args[1]
             m = self.messages[int(args[0]) - 1]
@@ -194,6 +200,36 @@ def test_inbox_without_password_is_skipped_not_an_incident():
     assert r["status"] == "succeeded"
     assert any("IMAP_PASSWORD" in w for w in r["warnings"])
     assert sqlite3.connect(orch.db_path).execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0
+
+
+def test_the_next_run_only_fetches_new_mails():
+    """Real case 2026-11-25 (MAIL_CURSOR): every hourly run fetched up to 300 mails again (5-7 min, timeouts). After a
+    run, the next one asks the server only for the UIDs after the last one examined; a new mail is still read."""
+    msgs = [mail("Newsletter <news@shop.example>", "Promo", "Soldes", "n1@x"),
+            mail("RH ACME <rh@acme.fr>", "Votre candidature", "Merci pour votre candidature.", "a1@acme.fr")]
+    orch, r, fake, c = run_inbox(msgs)
+    assert c.execute("SELECT uidvalidity, last_uid FROM mail_cursor").fetchone() == ("42", 2)
+    from app.agent import agent009_inbox_tracker as a9
+    fake.messages.append(mail("RH ACME <rh@acme.fr>", "Entretien", "Nous vous proposons un entretien.", "a2@acme.fr"))
+    fake.calls.clear()
+    orig = a9.Agent.connect
+    a9.Agent.connect = lambda self, ctx: fake
+    try:
+        with env_vars(IMAP_PASSWORD="app-pass", DEEPSEEK_API_KEY="k"):
+            orch.run("inbox")
+    finally:
+        a9.Agent.connect = orig
+    fetched = [x[2] for x in fake.calls if x[:2] == ("uid", "FETCH")]
+    assert ("uid", "SEARCH", None, "UID 3:*") in fake.calls and fetched == ["3"], fake.calls
+    assert c.execute("SELECT last_uid FROM mail_cursor").fetchone()[0] == 3
+    fake.calls.clear()
+    a9.Agent.connect = lambda self, ctx: fake
+    try:
+        with env_vars(IMAP_PASSWORD="app-pass", DEEPSEEK_API_KEY="k"):
+            orch.run("inbox")                       # nothing new: the server's "UID 4:*" answers 3, nothing is fetched
+    finally:
+        a9.Agent.connect = orig
+    assert not [x for x in fake.calls if x[:2] == ("uid", "FETCH")]
 
 
 if __name__ == "__main__":

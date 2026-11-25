@@ -93,6 +93,18 @@ class ReadOnlyMailbox:
             raise ValueError("bad IMAP date")
         return self._c.uid("SEARCH", None, f"SINCE {day}")
 
+    def search_uids_from(self, first: int):
+        """MAIL_CURSOR: the UIDs from `first` on (only the mails not examined yet); a search, read-only."""
+        return self._c.uid("SEARCH", None, f"UID {int(first)}:*")
+
+    def uidvalidity(self) -> str:
+        """The mailbox's UIDVALIDITY given by EXAMINE (a change means the UIDs were renumbered)."""
+        try:
+            typ, data = self._c.response("UIDVALIDITY")
+        except (AttributeError, imaplib.IMAP4.error):     # no UIDVALIDITY: the cursor is simply not used
+            return ""
+        return (data[-1].decode() if data and data[-1] else "") if isinstance(data, list) else ""
+
     def fetch_peek(self, uid: bytes | str, excerpt: int):
         uid = uid.decode() if isinstance(uid, bytes) else uid
         if not re.fullmatch(r"\d+", uid):
@@ -224,10 +236,20 @@ class Agent(BaseAgent):
             except imaplib.IMAP4.error as exc:
                 return envelope(ctx, AGENT_ID, "failed", errors=[{"category": "access_denied",
                                 "message": f"IMAP login refused ({sv.redact(str(exc), [password])[:120]})"}])
-            box.examine(cfg.get("mailbox", "INBOX"))
-            since = (datetime.now(timezone.utc) - timedelta(days=cfg["lookback_days"])).strftime("%d-%b-%Y")
-            typ, data = box.search_since(since)
-            uids = (data[0] or b"").split()[-cfg["max_messages"]:]
+            mailbox = cfg.get("mailbox", "INBOX")
+            box.examine(mailbox)
+            # MAIL_CURSOR (real case 2026-11-25: every hourly run fetched up to 300 mails again, 5-7 min, timeouts): only
+            # the mails after the last one examined are fetched, as long as the mailbox keeps its UIDVALIDITY
+            uv = box.uidvalidity()
+            with ctx.connect() as c:
+                cur = c.execute("SELECT uidvalidity, last_uid FROM mail_cursor WHERE mailbox=?", (mailbox,)).fetchone()
+            if cur and uv and cur[0] == uv:
+                typ, data = box.search_uids_from(int(cur[1]) + 1)
+                uids = [u for u in (data[0] or b"").split() if int(u) > int(cur[1])][-cfg["max_messages"]:]
+            else:
+                since = (datetime.now(timezone.utc) - timedelta(days=cfg["lookback_days"])).strftime("%d-%b-%Y")
+                typ, data = box.search_since(since)
+                uids = (data[0] or b"").split()[-cfg["max_messages"]:]
             for uid in uids:
                 typ, parts = box.fetch_peek(uid, cfg["excerpt_chars"] * 4)
                 header_raw = b"".join(p[1] for p in parts if isinstance(p, tuple) and b"HEADER" in p[0])
@@ -249,12 +271,16 @@ class Agent(BaseAgent):
                     client = client or make_llm(ctx, AGENT_ID)
                     self._ask_model(ctx, client, ev)
                 events.append(ev)
+            cursor = {"mailbox": mailbox, "uidvalidity": uv, "last_uid": max(int(u) for u in uids),
+                      "updated_at": utc_now()} if uids and uv else None
         finally:
             box.logout()
         with ctx.connect() as c:
             for ev in events:
                 ev["needs_check"] = ev["confidence"] < cfg["min_confidence"]
                 upsert(c, ctx.rows, "email_events", {k: ev[k] for k in ctx.rows["tables"]["email_events"]["fields"] if k in ev})
+            if cursor:                               # MAIL_CURSOR moves only once the mails are stored
+                upsert(c, ctx.rows, "mail_cursor", cursor)
                 if ev["application_id"] and ev["category"] in CATEGORY_TO_STATUS and not ev["needs_check"]:
                     cur = c.execute("SELECT status FROM applications WHERE application_id=?", (ev["application_id"],)).fetchone()[0]
                     new = CATEGORY_TO_STATUS[ev["category"]]

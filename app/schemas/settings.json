@@ -34,7 +34,8 @@
   "timeouts_s": {
    "agent_default": 300,
    "http_request": 20,
-   "agent002": 600
+   "agent002": 600,
+   "agent009": 600
   },
   "concurrency": {
    "sources_in_parallel": 3

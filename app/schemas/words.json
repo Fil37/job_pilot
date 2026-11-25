@@ -1410,6 +1410,10 @@
    [
     "^Put your (\\S+) key in (\\S+) \\(\\.env locally, secrets online\\)\\.$",
     "Mets ta clé \\1 dans \\2 (.env en local, secrets en ligne)."
+   ],
+   [
+    "^CV compilation failed:\\s*",
+    "échec de compilation du CV : "
    ]
   ]
  },
