@@ -99,7 +99,9 @@
     <section class="panel span-2" id="approvals">
       <div class="panel-title"><h2>{{ _('Pending approvals') }} <span class="count">{{ (approvals or [])|length }}</span></h2>
         <form method="post" action="{{ url_for('propose_skills') }}"><input type="hidden" name="csrf" value="{{ csrf }}">
-          <button type="submit" class="ghost small">{{ _('Propose skill activations') }}</button></form></div>
+          <button type="submit" class="ghost small">{{ _('Propose skill activations') }}</button></form>
+        {% if approvals|selectattr('action', 'equalto', 'activate_skill')|list %}<form method="post" action="{{ url_for('approve_all_skills') }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" class="good small">✓ {{ _('Approve all skills') }}</button></form>{% endif %}</div>
       {% if approvals %}
       <div class="scroll-box"><table><thead><tr><th>{{ _('Action') }}</th><th>{{ _('Target') }}</th><th>{{ _('Parameters') }}</th><th>{{ _('Decision') }}</th></tr></thead>
         <tbody>{% for a in approvals %}<tr><td><strong>{{ _(a.action) }}</strong></td><td><code>{{ a.target }}</code></td><td class="small">{% if a.action == 'activate_skill' and a.skill %}<strong>{{ _(a.skill.objective or '') }}</strong><p>{{ _(a.skill.summary or '') }}</p>{% else %}{{ a.parameters|tojson }}{% endif %}</td>

@@ -130,5 +130,18 @@ def test_agent000_has_a_health_state():
     assert "agent000" in [a["id"] for a in orch.store.dashboard(orch.agent_ids)["agents"] if a["state"] == "healthy"]
 
 
+def test_approve_all_skills_only_touches_skill_activations():
+    """Request of the user 2026-11-25 (APPROVE_ALL_SKILLS): one click approves every pending skill activation; a
+    sensitive approval (here a follow-up) stays pending, to be decided alone."""
+    orch = make_orch()
+    orch.store.propose_skill_activations()
+    orch.store.request_approval("send_followup", "f_1", {"text": "x"})
+    n_skills = sum(1 for a in orch.store.approvals() if a["action"] == "activate_skill")
+    assert n_skills > 5 and orch.approve_all_skills() == n_skills
+    left = orch.store.approvals()
+    assert [a["action"] for a in left] == ["send_followup"]
+    assert all(k["status"] == "validated" for k in orch.store.skills() if k["skill_id"] == "SK_SCORE")   # socle: approved → validated
+
+
 if __name__ == "__main__":
     run_main(globals())

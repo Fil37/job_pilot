@@ -1051,7 +1051,8 @@
    "No text could be read from this PDF (scanned image?).": "Aucun texte lisible dans ce PDF (image scannée ?).",
    "The model is unavailable: check DEEPSEEK_API_KEY in your secrets.": "Le modèle est indisponible : vérifie DEEPSEEK_API_KEY dans tes secrets.",
    "Remove 'example_profile: true': the profile must hold your own data.": "Retire « example_profile: true » : le profil doit contenir tes propres données.",
-   "Optional: poppler-utils reads PDFs a bit better; pypdf is used without it.": "Facultatif : poppler-utils lit un peu mieux les PDF ; pypdf est utilisé sans lui."
+   "Optional: poppler-utils reads PDFs a bit better; pypdf is used without it.": "Facultatif : poppler-utils lit un peu mieux les PDF ; pypdf est utilisé sans lui.",
+   "Approve all skills": "Tout approuver (skills)"
   }
  },
  "skill_text": {

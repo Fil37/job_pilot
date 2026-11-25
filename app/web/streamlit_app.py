@@ -480,6 +480,17 @@ def page_supervision() -> None:
                   for a in data["agents"]], hide_index=True, width="stretch")
     apps = o.store.approvals()
     st.subheader(f"Validations en attente ({len(apps)})")
+    n_skills = sum(1 for a in apps if a["action"] == "activate_skill")
+    if n_skills and st.button(f"✓ Tout approuver ({n_skills} skill(s))", type="primary",
+                              help="Seulement les activations de skills ; les publications, relances, rendez-vous et "
+                                   "nouveaux poids restent à valider un par un."):
+        if busy_by():
+            st.warning("Lecture seule : une tâche automatique travaille. Réessaie dans quelques minutes.")
+        else:
+            done = o.approve_all_skills()
+            save_online()
+            st.session_state.flash = ("success", f"{done} skill(s) approuvée(s).")
+            st.rerun()
     for a in apps:
         c1, c2, c3 = st.columns([6, 1, 1])
         c1.markdown(f"**{md(tr(a['action']))}** · `{a['target']}`")

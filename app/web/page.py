@@ -642,6 +642,13 @@ def register(app, orch: Orchestrator) -> None:
             orch.store.log_event("warning", "approval_refused", f"{approval_id}: {exc}", agent_id="user")
         return redirect(url_for("standup") + "#approvals")
 
+    @app.post("/skills/approve-all")
+    def approve_all_skills():
+        """APPROVE_ALL_SKILLS: only the pending skill activations (sensitive approvals stay one by one)."""
+        check_csrf()
+        orch.approve_all_skills()
+        return redirect(url_for("standup") + "#approvals")
+
     @app.post("/skills/propose")
     def propose_skills():
         check_csrf()

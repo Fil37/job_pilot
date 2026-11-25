@@ -195,6 +195,18 @@ class Orchestrator:
                     for a, (m, f) in APPROVAL_HANDLERS.items()}
         return self.store.decide(approval_id, approve, handlers)
 
+    def approve_all_skills(self) -> int:
+        """APPROVE_ALL_SKILLS (request of the user 2026-11-25): every pending 'activate_skill' approval at once. Only skill
+        activations: publications, follow-ups, calendar events and new weights are always approved one by one."""
+        done = 0
+        for a in self.store.approvals():
+            if a["action"] == "activate_skill":
+                self.decide(a["approval_id"], True)
+                done += 1
+        if done:
+            self.store.log_event("info", "user_approve_all_skills", f"{done} skill activation(s) approved", agent_id="user")
+        return done
+
     def _write_alerts(self, env: dict) -> None:
         """Alerts returned by an agent (data.alerts) are written by agent000 only; immediate ones also go to the
         desktop notification when notify-send exists (local, nothing leaves the machine)."""
