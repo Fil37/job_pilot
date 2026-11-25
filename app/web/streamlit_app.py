@@ -29,6 +29,20 @@ if "app" in sys.modules and not hasattr(sys.modules["app"], "__path__"):
 
 import streamlit as st  # noqa: E402
 
+
+def _fresh_code() -> None:
+    """STALE_ORCHESTRATOR: when an update changed a file of the agents or the schemas since the last run of this
+    process, job_pilot's modules are imported again from scratch (Streamlit only reruns this script)."""
+    files = [*(ROOT / "app" / "agent").glob("*.py"), *(ROOT / "app" / "schemas").glob("*.json")]
+    stamp = str(max((f.stat().st_mtime_ns for f in files), default=0))
+    if os.environ.get("_JOB_PILOT_CODE_STAMP") not in (None, stamp):
+        for name in [m for m in sys.modules if m == "app" or m.startswith("app.")]:
+            del sys.modules[name]
+    os.environ["_JOB_PILOT_CODE_STAMP"] = stamp
+
+
+_fresh_code()
+
 st.set_page_config(page_title="Job Pilot", page_icon="🧭", layout="wide")
 
 
@@ -132,7 +146,10 @@ def store():
 
 
 @st.cache_resource
-def _orch(version: int) -> Orchestrator:
+def _orch(version: int, code: int) -> Orchestrator:
+    """STALE_ORCHESTRATOR (real case 2026-11-25: after an update, the cached orchestrator was built from the OLD code:
+    "AttributeError: approve_all_skills"). The cache key includes the identity of the Orchestrator class: when an
+    update reloads the code, a new orchestrator is built."""
     o = Orchestrator(backup=store() is None)
     o.startup()
     return o
@@ -143,7 +160,7 @@ def orch() -> Orchestrator:
     if s and not st.session_state.get("pulled"):
         cloud.pull(s, INSTANCE_DIR)
         st.session_state.pulled = True
-    return _orch(cloud.local_version(INSTANCE_DIR) if s else 0)
+    return _orch(cloud.local_version(INSTANCE_DIR) if s else 0, id(Orchestrator))
 
 
 def busy_by() -> str | None:
