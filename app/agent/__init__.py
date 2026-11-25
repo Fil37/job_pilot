@@ -381,3 +381,27 @@ def make_llm(ctx: "RunContext", agent_id: str, transport=None) -> "sv.LLMClient"
                           transport=transport or ctx.llm_transport)
     ctx.llm_clients.append(client)
     return client
+
+
+def runs_path(stored, runs_dir) -> "Path | None":
+    """FILES_FOLLOW_THE_INSTANCE (real case 2026-11-25: online, every project said "fichier du brief absent": the stored
+    path was the absolute path of the machine that wrote it, your PC or GitHub Actions). A stored file path is found in
+    THIS instance's runs folder, from its part after the last 'runs' folder. Confined: None when it would leave it."""
+    if not stored:
+        return None
+    runs = Path(runs_dir).resolve()
+    p = Path(str(stored))
+    try:
+        if p.is_absolute() and runs in p.resolve().parents:
+            return p.resolve()
+    except OSError:
+        pass
+    parts = p.parts
+    if "runs" not in parts:
+        return None
+    rest = parts[len(parts) - 1 - parts[::-1].index("runs") + 1:]
+    if not rest:
+        return None
+    cand = runs.joinpath(*rest).resolve()
+    return cand if runs in cand.parents else None
+

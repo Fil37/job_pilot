@@ -46,7 +46,7 @@ def _secrets_to_env() -> None:
 
 _secrets_to_env()
 
-from app.agent import INSTANCE_DIR, NotFound, db_connect, load_schemas  # noqa: E402
+from app.agent import INSTANCE_DIR, NotFound, db_connect, load_schemas, runs_path  # noqa: E402
 from app.agent import common_cloud as cloud  # noqa: E402
 from app.agent.agent000_job_pilot import Orchestrator, application_params, build_digest, setup_checks  # noqa: E402
 from app.agent.common_projects import hw_item  # noqa: E402
@@ -66,6 +66,48 @@ def tr(text) -> str:
     for rx, rep in PATTERNS:
         text = rx.sub(rep, text)
     return text
+
+
+MD_SPECIAL = re.compile(r"([\\`*_\[\]$~|<>#])")
+
+
+def md(text) -> str:
+    """MD_ESCAPE (real case 2026-11-25: offer and model texts broke the page layout: a '$' opened a formula, '*' or '_'
+    italics, '[' a link). Texts from offers, companies and models are escaped before going into Markdown."""
+    return MD_SPECIAL.sub(r"\\\1", str(text or ""))
+
+
+STATE_COLOR = {"keep": "green", "succeeded": "green", "healthy": "green", "ready": "green", "ok": "green",
+               "reject": "red", "failed": "red", "critical": "red", "missing": "red",
+               "review": "orange", "partial": "orange", "degraded": "orange",
+               "running": "blue", "sent": "blue", "optional": "gray"}
+
+
+def skin() -> None:
+    """Studio Kit look on top of the Streamlit theme (.streamlit/config.toml): hero band, cards, metrics, buttons."""
+    st.markdown("""<style>
+      .block-container { padding-top: 2.2rem; max-width: 1180px; }
+      .jp-hero { background: #14161a; color: #f2f3ef; border-radius: 16px; padding: 22px 26px; margin-bottom: 18px;
+                 box-shadow: 0 1px 2px rgba(30,28,20,.06), 0 8px 22px rgba(30,28,20,.07); position: relative; overflow: hidden; }
+      .jp-hero:after { content: ""; position: absolute; right: -60px; top: -80px; width: 260px; height: 260px;
+                       background: radial-gradient(circle, rgba(198,239,90,.22), transparent 65%); }
+      .jp-hero h1 { font-family: "Space Grotesk", Inter, sans-serif; font-size: 1.9rem; margin: 0; color: #f2f3ef; }
+      .jp-hero p { margin: 4px 0 0; color: #a9aeb5; font-size: .95rem; }
+      .jp-hero .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #c6ef5a;
+                      margin-right: 10px; box-shadow: 0 0 0 4px rgba(198,239,90,.18); vertical-align: middle; }
+      [data-testid="stMetric"] { background: var(--secondary-background-color, #efede7); border-radius: 14px;
+                                 padding: 14px 16px; border: 1px solid rgba(128,128,128,.22); }
+      [data-testid="stMetricValue"] { font-family: "Space Grotesk", Inter, sans-serif; font-weight: 600; }
+      .stButton > button, .stDownloadButton > button, .stLinkButton > a { border-radius: 999px; font-weight: 600; }
+      h2, h3 { font-family: "Space Grotesk", Inter, sans-serif; letter-spacing: -.01em; }
+    </style>""", unsafe_allow_html=True)
+
+
+def hero(title: str, subtitle: str) -> None:
+    """The dark Studio Kit band; texts are HTML-escaped (they may come from an offer)."""
+    import html as _html
+    st.markdown(f'<div class="jp-hero"><h1><span class="dot"></span>{_html.escape(title)}</h1>'
+                f'<p>{_html.escape(subtitle)}</p></div>', unsafe_allow_html=True)
 
 
 # =========================================================================== access, snapshot, orchestrator
@@ -185,37 +227,46 @@ def go(page: str, **state) -> None:
 def page_home() -> None:
     o = orch()
     digest = build_digest(o.db_path, o.config["digest"], o.config["scoring"]["weights_version"])
+    hero("Job Pilot", "Ta recherche d'emploi, triée et préparée chaque jour. Rien n'est envoyé sans toi.")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Offres vues", one("SELECT COUNT(*) n FROM offers")["n"])
     c2.metric("Retenues", len(digest["top"]))
     c3.metric("À revoir", len(digest["review"]))
     c4.metric("Candidatures", one("SELECT COUNT(*) n FROM applications")["n"])
     b1, b2, b3 = st.columns(3)
-    if b1.button("▶ Lancer la recherche du jour", disabled=bool(busy_by())):
+    if b1.button("▶ Lancer la recherche du jour", disabled=bool(busy_by()), type="primary", width="stretch"):
         run_chain("daily")
         st.rerun()
-    if b2.button("↻ Re-classer", disabled=bool(busy_by())):
+    if b2.button("↻ Re-classer", disabled=bool(busy_by()), width="stretch"):
         run_chain("rescore")
         st.rerun()
-    if b3.button("✉ Lire la boîte mail", disabled=bool(busy_by())):
+    if b3.button("✉ Lire la boîte mail", disabled=bool(busy_by()), width="stretch"):
         run_chain("inbox")
         st.rerun()
     alerts = rows("SELECT * FROM alerts WHERE seen_at IS NULL ORDER BY alert_id DESC LIMIT 30")
-    st.subheader(f"Alertes ({len(alerts)})")
-    for a in alerts:
-        col1, col2 = st.columns([8, 1])
-        col1.markdown(f"**{tr(a['category'])}** · {a['message']}  \n:grey[{a['created_at'][:16].replace('T', ' ')}]")
-        if col2.button("✓ Vu", key=f"al{a['alert_id']}"):
-            act("agent000", "mark_alerts_seen", alert_id=a["alert_id"])
-            st.rerun()
-    for title, items in (("Meilleures offres du jour", digest["top"]), ("À revoir", digest["review"])):
+    with st.expander(f"🔔 Alertes ({len(alerts)})", expanded=bool(alerts) and len(alerts) <= 6):
+        for a in alerts:
+            with st.container(border=True):
+                col1, col2 = st.columns([9, 1])
+                with col1:
+                    st.badge(tr(a["category"]), color="blue" if a["kind"] == "immediate" else "gray")
+                    st.markdown(f"{md(a['message'])}  \n:grey[{a['created_at'][:16].replace('T', ' ')}]")
+                if col2.button("✓ Vu", key=f"al{a['alert_id']}"):
+                    act("agent000", "mark_alerts_seen", alert_id=a["alert_id"])
+                    st.rerun()
+    for title, items, review in (("Meilleures offres du jour", digest["top"], False), ("À revoir", digest["review"], True)):
         st.subheader(f"{title} ({len(items)})")
         for r in items:
-            col1, col2 = st.columns([8, 1])
-            col1.markdown(f"**{r['score']:.0f}** · **{r['title']}** · {r['company']} · {r.get('location') or '?'}  \n"
-                          f":grey[{' · '.join(r['why'])}]" + (f"  \n:orange[{r['reason']}]" if title == "À revoir" else ""))
-            if col2.button("Ouvrir", key=f"{title[:3]}{r['offer_id']}"):
-                go("Offre", offer=r["offer_id"])
+            with st.container(border=True):
+                col0, col1, col2 = st.columns([1, 8, 1.2], vertical_alignment="center")
+                col0.markdown(f"### {r['score']:.0f}")
+                with col1:
+                    st.markdown(f"**{md(r['title'])}**  \n{md(r['company'])} · {md(r.get('location') or '?')}"
+                                f"{' · ' + md(r['contract']) if r.get('contract') else ''}  \n:grey[{md(' · '.join(r['why']))}]")
+                    if review:
+                        st.badge(md(r["reason"])[:120], color="orange")
+                if col2.button("Ouvrir", key=f"{title[:3]}{r['offer_id']}", width="stretch"):
+                    go("Offre", offer=r["offer_id"])
 
 
 def page_offer() -> None:
@@ -233,15 +284,15 @@ def page_offer() -> None:
     off = one("SELECT * FROM offers WHERE offer_id=?", oid)
     dec = one("SELECT * FROM experience_decisions WHERE offer_id=? ORDER BY decided_at DESC LIMIT 1", oid)
     sc = one("SELECT * FROM scores WHERE offer_id=? ORDER BY scored_at DESC LIMIT 1", oid)
-    st.header(off["title"])
-    st.caption(" · ".join(x for x in (off["company"], off.get("location"), off.get("contract"), off.get("salary_text"),
-                                       tr(off["source_id"])) if x))
+    hero(off["title"], " · ".join(x for x in (off["company"], off.get("location"), off.get("contract"),
+                                               off.get("salary_text"), tr(off["source_id"])) if x))
     if (off.get("url") or "").startswith(("http://", "https://")):
         st.link_button("↗ Voir l'annonce", off["url"])
     if dec:
         d = dec.get("user_override") or dec["decision"]
-        st.markdown(f"**Expérience : {tr(d)}** · {dec['reason']}" + (f"  \n> {dec['source_sentence']}" if dec.get("source_sentence") else "")
-                    + ("  \n:blue[ta décision]" if dec.get("user_override") else ""))
+        st.badge(f"Expérience : {tr(d)}" + (" (ta décision)" if dec.get("user_override") else ""),
+                 color=STATE_COLOR.get(d, "gray"))
+        st.markdown(md(dec["reason"]) + (f"  \n> {md(dec['source_sentence'])}" if dec.get("source_sentence") else ""))
         k1, k2, k3 = st.columns(3)
         if k1.button("Garder"):
             act("agent003", "set_user_decision", offer_id=oid, choice="keep", ok="Décision enregistrée.")
@@ -261,7 +312,7 @@ def page_offer() -> None:
                     + "  \n**Manques :** " + (", ".join(json.loads(sc["missing"])) or "aucun"))
     for b in rows("SELECT brief_id, skill, title, json_extract(brief, '$.alternatives') alts FROM project_briefs WHERE offer_id=?", oid):
         g = project_gain_for(oid, b["skill"])
-        st.info(f"**Projet proposé** : {b['title']} ({', '.join(skill_label(x.strip(), json.loads(b['alts'] or '{}')) for x in b['skill'].split(','))})"
+        st.info(f"**Projet proposé** : {md(b['title'])} ({', '.join(skill_label(x.strip(), json.loads(b['alts'] or '{}')) for x in b['skill'].split(','))})"
                 + (f"  \nCouverture du CV optimal : {g['coverage_now']} % → {g['coverage_with']} % ({g['coverage_gain']:+d} points) · "
                    f"score {g['score_now']:.0f} → {g['score_with']:.0f}" if g else ""))
     st.subheader("Candidature")
@@ -269,7 +320,8 @@ def page_offer() -> None:
     for a in apps:
         folder = o.runs_dir / a["package_ref"]
         cols = st.columns(4)
-        cols[0].markdown(f"**{tr(a['status'])}** · {a['created_at'][:16].replace('T', ' ')}")
+        cols[0].badge(tr(a["status"]), color=STATE_COLOR.get(a["status"], "gray"))
+        cols[0].caption(a["created_at"][:16].replace("T", " "))
         for i, f in enumerate(("cv.pdf", "letter.pdf")):
             if (folder / f).is_file():
                 cols[i + 1].download_button(f"⬇ {f}", (folder / f).read_bytes(), file_name=f, key=f"{a['application_id']}{f}")
@@ -299,7 +351,7 @@ def page_offer() -> None:
                     act("agent000", "mark_alerts_seen", category="full_text", ref=oid)
                     run_chain("rescore")
                 st.rerun()
-    with st.expander("Description"):
+    with st.expander("Description de l'annonce"):
         st.text(off["description"])
 
 
@@ -312,6 +364,7 @@ def project_gain_for(oid: str, skill_csv: str):
 
 def page_projects() -> None:
     o = orch()
+    hero("Projets", "Pour combler un manque, renforcer une compétence ou en élargir une, avec le gain pour tes offres.")
     briefs = rows("SELECT b.*, json_extract(b.brief, '$.kind') kind, json_extract(b.brief, '$.coverage.offers') covers "
                   "FROM project_briefs b WHERE status!='superseded' ORDER BY created_at DESC LIMIT 100")
     if not briefs:
@@ -332,14 +385,16 @@ def page_projects() -> None:
             off = one("SELECT title, company, url FROM offers WHERE offer_id=?", b["offer_id"])
             if off:
                 c1, c2 = st.columns([6, 1])
-                if c1.button(f"Offre visée : {off['title']} · {off['company']}"):
+                if c1.button(f"Offre visée : {md(off['title'])} · {md(off['company'])}"):
                     go("Offre", offer=b["offer_id"])
                 if (off.get("url") or "").startswith(("http://", "https://")):
                     c2.link_button("↗ Annonce", off["url"])
-        path = Path(b["path"])
-        text = path.read_text(encoding="utf-8") if path.is_file() and o.runs_dir.resolve() in path.resolve().parents else ""
+        path = runs_path(b["path"], o.runs_dir)
+        text = path.read_text(encoding="utf-8") if path and path.is_file() else ""
         hw_section = re.compile(r"## Matériel\n.*?(?=\n## )", re.S)
-        st.markdown(hw_section.sub("", text) if text else "_(fichier du brief absent)_")
+        body = re.sub(r"\A# .*\n", "", hw_section.sub("", text))       # the title is already in the selector
+        st.subheader(ans.get("title", ""))
+        st.markdown(body.replace("$", "\\$") if text else "_(fichier du brief absent)_")
         hw = [hw_item(h) for h in ans.get("hardware") or []]
         if hw:
             st.subheader("Matériel (survole « ? » pour le détail)")
@@ -402,8 +457,9 @@ def page_projects() -> None:
                 run_chain("portfolio", params={"agent008": {"brief_id": bid}}, title=f"démo portfolio {bid} (Streamlit)")
                 st.rerun()
             entry = one("SELECT * FROM portfolio_entries WHERE brief_id=?", bid)
-            if entry and entry.get("demo_path") and Path(entry["demo_path"]).is_file():
-                st.download_button("⬇ Page de démo (index.html)", Path(entry["demo_path"]).read_bytes(), file_name="index.html")
+            demo = runs_path(entry.get("demo_path"), o.runs_dir) if entry else None
+            if demo and demo.is_file():
+                st.download_button("⬇ Page de démo (index.html)", demo.read_bytes(), file_name="index.html")
                 with st.form("publish"):
                     pub = st.text_input("Date de publication (AAAA-MM-JJTHH:MM)")
                     exp = st.text_input("Date de fin (facultative)")
@@ -417,6 +473,7 @@ def page_projects() -> None:
 
 def page_supervision() -> None:
     o = orch()
+    hero("Supervision", "Santé des agents, validations, incidents et derniers runs.")
     data = o.store.dashboard(o.agent_ids)
     st.subheader("Santé des agents")
     st.dataframe([{"agent": a["id"], "rôle": tr(a["id"]), "état": tr(a["state"]), "détail": tr(a["detail"] or "")}
@@ -450,6 +507,7 @@ def page_supervision() -> None:
 
 def page_setup() -> None:
     o = orch()
+    hero("Premiers pas", "Vérifie l'installation, importe ton CV et règle ta recherche.")
     st.subheader("Vérification")
     st.dataframe([{"élément": tr(c["item"]), "état": tr(c["state"]), "détail": c["detail"], "à faire": tr(c["fix"])}
                   for c in setup_checks(o)], hide_index=True, width="stretch")
@@ -511,6 +569,7 @@ PAGES = {"Accueil": page_home, "Offre": page_offer, "Projets": page_projects, "S
 
 
 def main() -> None:
+    skin()
     gate()
     st.sidebar.title("🧭 Job Pilot")
     page = st.sidebar.radio("Pages", list(PAGES), index=list(PAGES).index(st.session_state.get("page", "Accueil")),

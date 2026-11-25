@@ -167,7 +167,8 @@ def portfolio_orch(tmp: Path):
     inst = make_instance(tmp)
     inst["overrides"]["portfolio"] = {"repo": str(bare)}
     orch = make_orch(tmp, instance=inst)
-    img = tmp / "b_1.png"
+    img = orch.runs_dir / "portfolio_assets" / "b_1.png"     # where the 'Projet réalisé' sheet stores images
+    img.parent.mkdir(parents=True, exist_ok=True)
     img.write_bytes(b"\x89PNG fake image")
     brief = {**BRIEF, "card": {**BRIEF["card"], "image_file": str(img), "image_alt": "Banc CAN"}}
     with sqlite3.connect(orch.db_path) as c:

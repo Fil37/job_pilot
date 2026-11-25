@@ -130,5 +130,21 @@ def test_postgres_store_same_contract():
     assert sqlite3.connect(b / "job_pilot.db").execute("SELECT x FROM t").fetchone()[0] == "mon offre"
 
 
+def test_stored_files_follow_the_instance_and_stay_confined():
+    """Real case 2026-11-25 (FILES_FOLLOW_THE_INSTANCE): online, every project said "fichier du brief absent" because the
+    stored path was written by GitHub Actions (/home/runner/...) or on the PC. It is found in THIS runs folder; a path
+    that would leave the folder is refused."""
+    from app.agent import runs_path
+    tmp = Path(tempfile.mkdtemp())
+    runs = tmp / "instance" / "runs"
+    (runs / "20261125T145206_x").mkdir(parents=True)
+    (runs / "20261125T145206_x" / "brief_o1.md").write_text("# Projet")
+    stored = "/home/runner/work/_temp/instance/runs/20261125T145206_x/brief_o1.md"
+    assert runs_path(stored, runs).read_text() == "# Projet"
+    assert runs_path(str(runs / "20261125T145206_x" / "brief_o1.md"), runs).is_file()
+    assert runs_path("/home/runner/work/_temp/instance/runs/../../../etc/passwd", runs) is None
+    assert runs_path("/etc/passwd", runs) is None and runs_path("", runs) is None and runs_path("/x/runs", runs) is None
+
+
 if __name__ == "__main__":
     run_main(globals())

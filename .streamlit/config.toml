@@ -1,0 +1,50 @@
+# job_pilot online: Streamlit theme = Studio Kit (app/static/css/job_pilot_master.css tokens, light and dark).
+# Read by Streamlit from the folder where `streamlit run` starts (the repository root, also on Streamlit Cloud).
+[server]
+enableStaticServing = true      # app/web/static → ../static: the kit's fonts, served by the app itself
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+font = "Inter"
+headingFont = "Space Grotesk"
+headingFontWeights = 600
+headingFontSizes = ["2rem", "1.45rem", "1.2rem", "1.05rem", "1rem", "1rem"]
+baseFontSize = 15
+baseRadius = "14px"
+showWidgetBorder = true
+
+[[theme.fontFaces]]
+family = "Inter"
+url = "app/static/css/Inter.ttf"
+weight = "100 900"
+
+[[theme.fontFaces]]
+family = "Space Grotesk"
+url = "app/static/css/SpaceGrotesk.ttf"
+weight = "300 700"
+
+[theme.light]
+primaryColor = "#4a6400"
+backgroundColor = "#e6e4dd"
+secondaryBackgroundColor = "#efede7"
+textColor = "#15171b"
+linkColor = "#4a6400"
+borderColor = "#d6d3ca"
+
+[theme.light.sidebar]
+backgroundColor = "#dcd9d1"
+secondaryBackgroundColor = "#e7e5dd"
+
+[theme.dark]
+primaryColor = "#c6ef5a"
+backgroundColor = "#0b0c0e"
+secondaryBackgroundColor = "#15171b"
+textColor = "#f0f1ec"
+linkColor = "#c6ef5a"
+borderColor = "#24272d"
+
+[theme.dark.sidebar]
+backgroundColor = "#121418"
+secondaryBackgroundColor = "#1b1e23"

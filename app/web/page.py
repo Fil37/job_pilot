@@ -17,7 +17,7 @@ from markupsafe import Markup
 
 from flask import abort, g, redirect, render_template, request, send_file, session, url_for
 
-from app.agent import NotFound, db_connect
+from app.agent import NotFound, db_connect, runs_path
 from app.agent.agent000_job_pilot import chain_label
 from app.agent import supervision as sv
 from app.agent.agent000_job_pilot import Orchestrator, application_params, build_digest
@@ -197,8 +197,8 @@ def register(app, orch: Orchestrator) -> None:
     def brief_file(brief_id: str):
         with db_connect(orch.db_path) as c:
             row = c.execute("SELECT path FROM project_briefs WHERE brief_id=?", (brief_id,)).fetchone()
-        path = Path(row[0]).resolve() if row else None
-        if not path or orch.runs_dir.resolve() not in path.parents or not path.is_file():
+        path = runs_path(row[0], orch.runs_dir) if row else None
+        if not path or not path.is_file():
             abort(404)
         return send_file(path, mimetype="text/plain; charset=utf-8")
 
@@ -230,9 +230,12 @@ def register(app, orch: Orchestrator) -> None:
             row = c.execute("SELECT demo_path FROM portfolio_entries WHERE entry_id=?", (entry_id,)).fetchone()
         if not row:
             abort(404)
-        base = Path(row[0]).resolve().parent
+        demo = runs_path(row[0], orch.runs_dir)
+        if not demo:
+            abort(404)
+        base = demo.parent
         path = (base / name).resolve()
-        if orch.runs_dir.resolve() not in base.parents or (path != base and base not in path.parents) or not path.is_file():
+        if (path != base and base not in path.parents) or not path.is_file():
             abort(404)
         resp = send_file(path)
         g.demo_page = True                     # your own site: its inline styles / scripts are allowed on this route
@@ -321,8 +324,8 @@ def register(app, orch: Orchestrator) -> None:
                 br["skill"] = label_skills(br["skill"], br.pop("alts", None))
         company = {"facts": json.loads(comp[0]), "confidence": comp[1], "updated_at": comp[2]} if comp else None
         for sh in sheets:
-            pth = Path(sh["path"])
-            sh["text"] = pth.read_text(encoding="utf-8") if pth.is_file() else ""
+            pth = runs_path(sh["path"], orch.runs_dir)
+            sh["text"] = pth.read_text(encoding="utf-8") if pth and pth.is_file() else ""
         for a in apps:
             folder = orch.runs_dir / a["package_ref"]
             a["files"] = [f for f in ("cv.pdf", "letter.pdf", "package.md") if (folder / f).is_file()]
@@ -438,8 +441,8 @@ def register(app, orch: Orchestrator) -> None:
                                (b["offer_id"],)).fetchone()
                 offer = {**dict(o), "score": sc[0] if sc else None} if o else None
         b["brief"] = json.loads(b["brief"])
-        path = Path(b["path"]).resolve()
-        if orch.runs_dir.resolve() not in path.parents:
+        path = runs_path(b["path"], orch.runs_dir)
+        if not path:
             abort(404)
         return b, offer, path
 
@@ -543,8 +546,8 @@ def register(app, orch: Orchestrator) -> None:
         if not row or not row[0]:
             abort(404)
         base = orch.runs_dir.resolve()
-        path = (Path(row[0]) if kind != "package" else base / row[0]).resolve()
-        if base not in path.parents or not path.is_file():
+        path = runs_path(row[0], base) if kind != "package" else (base / row[0]).resolve()
+        if not path or base not in path.parents or not path.is_file():
             abort(404)
         title, sections = md_sections(path.read_text(encoding="utf-8"))
         files = []

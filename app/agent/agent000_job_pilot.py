@@ -490,28 +490,28 @@ def setup_checks(orch) -> list[dict]:
         prof = load_profile(path)
         problems = check_profile(prof)[0]
         add("profile", not prof.get("example_profile") and not problems,
-            "example profile (not yours)" if prof.get("example_profile") else
-            ("; ".join(problems[:3]) if problems else f"{len(prof.get('experiences') or [])} experience(s)"),
+            "profil d'exemple (pas le tien)" if prof.get("example_profile") else
+            ("; ".join(problems[:3]) if problems else f"{len(prof.get('experiences') or [])} expérience(s)"),
             "Import your CV (PDF) below, check the draft, then validate it.")
     except Exception as exc:  # noqa: BLE001 - shown to the user, never hidden
         add("profile", False, f"{type(exc).__name__}: {exc}", "Import your CV (PDF) below.")
     crit = orch.instance.get("criteria") or {}
     add("criteria", bool(crit.get("roles")) and crit.get("roles") != ["data engineer", "data scientist"],
-        ", ".join(crit.get("roles") or []) or "no target role", "Fill in your search criteria below.")
+        ", ".join(crit.get("roles") or []) or "aucun poste visé", "Fill in your search criteria below.")
     llm = orch.config["llm"]
     add("model key", bool(os.environ.get(llm["api_key_env"])), llm["api_key_env"],
         f"Put your {llm['provider']} key in {llm['api_key_env']} (.env locally, secrets online).")
-    add("pdftotext / pdfinfo", bool(shutil.which("pdftotext") and shutil.which("pdfinfo")), "poppler-utils (else pypdf)",
+    add("pdftotext / pdfinfo", bool(shutil.which("pdftotext") and shutil.which("pdfinfo")), "poppler-utils (sinon pypdf)",
         "Optional: poppler-utils reads PDFs a bit better; pypdf is used without it.", optional=True)
     eng = orch.config["latex"].get("engine_path") or "tectonic"
     add("LaTeX (Tectonic)", bool(shutil.which(eng) or Path(os.path.expanduser(eng)).is_file()), eng,
         "Install Tectonic to compile your CV (downloaded automatically online).")
     mb = (orch.instance.get("external_refs") or {}).get("mailbox") or {}
     add("mailbox (read-only)", bool(mb.get("host") and mb.get("user") and os.environ.get(mb.get("password_env", "IMAP_PASSWORD"))),
-        mb.get("host") or "not configured", "Optional: an app password of your mailbox in IMAP_PASSWORD.", optional=True)
+        mb.get("host") or "non configurée", "Optional: an app password of your mailbox in IMAP_PASSWORD.", optional=True)
     pf = orch.config["portfolio"]
     from app.agent.common_projects import portfolio_token
-    add("portfolio", bool(pf.get("repo")) and bool(portfolio_token(pf)), pf.get("repo") or "not configured",
+    add("portfolio", bool(pf.get("repo")) and bool(portfolio_token(pf)), pf.get("repo") or "non configuré",
         f"Optional: your GitHub Pages repository below, and a token in {pf['token_env']}.", optional=True)
     return out
 

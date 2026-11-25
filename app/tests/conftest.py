@@ -17,6 +17,13 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# TESTS_NEVER_ONLINE (real case 2026-11-25: with JOB_PILOT_DATABASE_URL in .env, a test tried to restore the REAL online
+# snapshot): the online variables are blanked BEFORE job_pilot reads .env (python-dotenv never overrides an existing
+# variable, even empty), and every subprocess of the tests inherits the blanks.
+for _k in ("JOB_PILOT_DATABASE_URL", "JOB_PILOT_SNAPSHOT_KEY", "JOB_PILOT_SNAPSHOT_DIR", "JOB_PILOT_APP_PASSWORD",
+           "JOB_PILOT_INSTANCE_DIR"):
+    os.environ[_k] = ""
+
 from app.agent import DB_PATH, load_schemas  # noqa: E402
 from app.agent import supervision as sv  # noqa: E402
 

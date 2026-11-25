@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.agent.common_projects import (HW_KEYS, hw_item, image_problem, parse_done_on)  # noqa: F401 - shared, see common_projects.py
-from app.agent import NotFound, ROOT, BaseAgent, RunContext, db_connect, envelope, fold, make_llm, sha, upsert, utc_now
+from app.agent import NotFound, ROOT, BaseAgent, RunContext, db_connect, runs_path, envelope, fold, make_llm, sha, upsert, utc_now
 from app.agent.common_profile import candidate_target, load_profile, own_skills
 from app.agent.common_scoring import (coverage_lines, gain_lines, offer_skills, offers_gain, project_gain,
                                              skill_alternatives, skill_label)
@@ -448,9 +448,7 @@ def _load_brief(orch, brief_id: str):
                            (b["offer_id"],)).fetchone()
             offer = {**dict(o), "score": sc[0] if sc else None} if o else None
     b["brief"] = json.loads(b["brief"])
-    path = Path(b["path"]).resolve()
-    if Path(orch.runs_dir).resolve() not in path.parents:
-        path = None                                  # a file outside the runs folder is never written
+    path = runs_path(b["path"], orch.runs_dir)      # None: never written outside this instance's runs folder
     return b, offer, path
 
 

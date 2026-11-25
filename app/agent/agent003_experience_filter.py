@@ -133,6 +133,11 @@ def num(x) -> str:
     return f"{x:g}".replace(".", ",")
 
 
+def years(n) -> str:
+    """'1 an exigé', '3 ans exigés' (real case 2026-11-25: '1 ans exigés' on the offer page)."""
+    return f"{num(n)} an exigé" if float(n) < 2 else f"{num(n)} ans exigés"
+
+
 def decide(x: dict, months: dict, rule: dict, exp_cfg: dict) -> dict:
     """keep / reject / review + reason code, sentence and confidence (all computed, nothing generated)."""
     cand = countable_years(months, rule, x["excludes_internship"], x["excludes_apprenticeship"])
@@ -159,23 +164,23 @@ def decide(x: dict, months: dict, rule: dict, exp_cfg: dict) -> dict:
         if required and low <= limit < req and req - low > spread:
             return res("review", "MULTIPLE_YEARS", f"{low} et {req} ans exigés dans deux phrases différentes", sentence, 0.5, req)
         if x["junior"] and req >= 3:
-            return res("review", "CONTRADICTION_JUNIOR_YEARS", f"« {x['junior']} » mais {req} ans exigés", sentence, 0.5, req)
+            return res("review", "CONTRADICTION_JUNIOR_YEARS", f"« {x['junior']} » mais {years(req)}", sentence, 0.5, req)
         if x["label_beginner"] and req >= 2 or (x["label_years"] is not None and abs(x["label_years"] - req) >= 2):
             return res("review", "CONTRADICTION_LABEL_TEXT",
                        f"le site indique « {'débutant accepté' if x['label_beginner'] else str(x['label_years']) + ' ans'} », le texte {req} ans",
                        sentence, 0.5, req)
         if req <= limit:
-            return res("keep", "YEARS_WITHIN_LIMIT", f"{req} ans exigés, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))",
+            return res("keep", "YEARS_WITHIN_LIMIT", f"{years(req)}, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))",
                        sentence, 0.9, req)
         excluded = x["excludes_internship"] or x["excludes_apprenticeship"]
         if req <= limit + gap:
             code = "EXCLUSION_REDUCES_YEARS" if excluded and req <= limit_all else "YEARS_BORDERLINE"
-            return res("review", code, f"{req} ans exigés, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))", sentence, 0.5, req)
+            return res("review", code, f"{years(req)}, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))", sentence, 0.5, req)
         if excluded and req <= limit_all:
             return res("reject", "EXCLUSION_REDUCES_YEARS",
-                       f"{req} ans exigés hors stages ou alternance, tu en comptes {num(cand)}",
+                       f"{years(req)} hors stages ou alternance, tu en comptes {num(cand)}",
                        x["exclusion_sentence"] or sentence, 0.85, req)
-        return res("reject", "YEARS_ABOVE_LIMIT", f"{req} ans exigés, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))",
+        return res("reject", "YEARS_ABOVE_LIMIT", f"{years(req)}, ta limite est {num(limit)} (tu comptes {num(cand)} an(s))",
                    sentence, 0.95 if req >= limit + 3 else 0.85, req)
     if x["label_years"] is not None and x["label_years"] > limit:
         return res("review", "CONTRADICTION_LABEL_TEXT",

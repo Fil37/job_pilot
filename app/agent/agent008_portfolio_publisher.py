@@ -36,7 +36,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.agent.common_projects import (portfolio_token, parse_done_on, IMAGE_TYPES, image_problem, grid_span, grid_titles)  # noqa: F401 - shared, see common_projects.py
-from app.agent import NotFound, BaseAgent, RunContext, db_connect, decode_row, envelope, fold, sha, upsert, utc_now
+from app.agent import NotFound, BaseAgent, runs_path, RunContext, db_connect, decode_row, envelope, fold, sha, upsert, utc_now
 from app.agent import supervision as sv
 
 SKILLS = [
@@ -219,12 +219,13 @@ class Agent(BaseAgent):
         return envelope(ctx, AGENT_ID, status, errors=errors, data={"done": done, "alerts": alerts},
                         metrics={"done": len(done)})
 
-    def _card(self, b: dict, slug: str, cfg: dict):
+    def _card(self, b: dict, slug: str, cfg: dict, runs_dir):
         """(card markup, (image source path, path in the portfolio) or None) from YOUR 'Projet réalisé' sheet."""
         card = b["brief"]["card"]
         image = None
-        if card.get("image_file") and Path(card["image_file"]).is_file():
-            image = (card["image_file"], f"{cfg.get('assets_dir', 'portfolio-assets')}/{slug}{Path(card['image_file']).suffix.lower()}")
+        src = runs_path(card.get("image_file"), runs_dir)        # FILES_FOLLOW_THE_INSTANCE
+        if src and src.is_file():
+            image = (str(src), f"{cfg.get('assets_dir', 'portfolio-assets')}/{slug}{src.suffix.lower()}")
         return card_html(card, slug, card_year(b["brief"]), image[1] if image else None), image
 
     def _brief(self, ctx, brief_id):
@@ -245,7 +246,7 @@ class Agent(BaseAgent):
         git.run("clone", "--depth", "1", "--branch", cfg["branch"], cfg["repo"], str(folder))
         shutil.rmtree(folder / ".git", ignore_errors=True)               # a demo is not a repository
         page = folder / cfg["file"]
-        card, image = self._card(b, slug, cfg)
+        card, image = self._card(b, slug, cfg, ctx.run_dir.parent)
         if image:
             (folder / image[1]).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(image[0], folder / image[1])
@@ -277,7 +278,7 @@ class Agent(BaseAgent):
                 raise ValueError("date de réalisation du projet absente : renseigne-la avant de publier")
             if not (b["brief"].get("card") or {}).get("title"):
                 raise ValueError("fiche « Projet réalisé » non remplie")
-            card, image = self._card(b, e["slug"], cfg)
+            card, image = self._card(b, e["slug"], cfg, ctx.run_dir.parent)
             if image:
                 asset = image[1]
                 dest = work / asset
