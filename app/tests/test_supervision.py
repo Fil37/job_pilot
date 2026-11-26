@@ -253,7 +253,7 @@ def test_operations_backup_startup_disk_brief_and_guard():
     s = store()
     folder = Path(tempfile.mkdtemp()) / "backups"
     b1 = s.backup_database(folder, "proj")
-    assert b1["created"] and b1["integrity"] == "ok" and oct(os.stat(b1["path"]).st_mode)[-3:] == "600"
+    assert b1["created"] and b1["integrity"] == "ok" and (os.name == "nt" or oct(os.stat(b1["path"]).st_mode)[-3:] == "600")   # no file modes on Windows
     assert s.backup_database(folder, "proj")["created"] is False and sv.backups(folder, "proj")[0]["name"].startswith("proj_")
     states = s.startup_check({"agent001": lambda: ("healthy", "tool ok"), "agent002": lambda: ("critical", "key missing"),
                               "agent003": lambda: 1 / 0})
