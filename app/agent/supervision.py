@@ -1,4 +1,4 @@
-"""STUDIO KIT — socle de supervision (version 2.1, 2026-11-26 : connexions fermées et processus vérifiés sous Windows ; 2.0, 2026-11-20), extrait d'auto_clip et rendu générique.
+"""STUDIO KIT — socle de supervision (version 2.4, 2026-11-26 : connexions fermées et processus vérifiés sous Windows ; 2.0, 2026-11-20), extrait d'auto_clip et rendu générique.
 
 Ce que la page Supervision du kit affiche, mesuré pour de vrai :
   - coût de chaque appel à un modèle d'IA (jetons, latence, $), rattaché au run et à l'agent ;
@@ -88,7 +88,7 @@ SCHEMA_V2 = (
 
 
 class ClosingConnection(sqlite3.Connection):
-    """WINDOWS_FILES (2.1, 2026-11-26): `with sqlite3.connect(...) as c` commits but does NOT close; Windows then
+    """WINDOWS_FILES (2.4, 2026-11-26): `with sqlite3.connect(...) as c` commits but does NOT close; Windows then
     refuses to delete or replace the database file (WinError 32). This connection also closes at the end of the
     block, on every system."""
 
