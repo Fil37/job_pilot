@@ -32,6 +32,7 @@ jobs:
       PORTFOLIO_TOKEN: ${{ secrets.PORTFOLIO_TOKEN }}
       JOB_PILOT_DATABASE_URL: ${{ secrets.JOB_PILOT_DATABASE_URL }}
       JOB_PILOT_SNAPSHOT_KEY: ${{ secrets.JOB_PILOT_SNAPSHOT_KEY }}
+      JOB_PILOT_INSTANCE_DIR: ${{ runner.temp }}/instance
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,7 +45,6 @@ jobs:
           SCHEDULE: ${{ github.event.schedule }}
           CHOSEN: ${{ inputs.chain }}
         run: |
-          export JOB_PILOT_INSTANCE_DIR="$RUNNER_TEMP/instance"
           case "$SCHEDULE" in
             "30 5 * * *") CHAIN=daily ;;
             "0 6 * * 1") CHAIN=weekly ;;
@@ -53,3 +53,13 @@ jobs:
           esac
           python -m app.agent.agent000_job_pilot --chain "$CHAIN" --sync
           if [ "$CHAIN" = inbox ]; then python -m app.agent.agent000_job_pilot --chain portfolio --sync; fi
+      # ONLINE_SUMMARY: numbers only (the repository is public) for harness's "This morning".
+      - name: Summary for harness (numbers only)
+        if: always()
+        run: python -m app.agent.agent000_job_pilot --summary > "$RUNNER_TEMP/job_pilot-summary.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: job_pilot-summary
+          path: ${{ runner.temp }}/job_pilot-summary.json
+          retention-days: 3

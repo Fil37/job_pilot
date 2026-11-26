@@ -590,6 +590,49 @@ def run_standalone(agent_id: str) -> int:
     return main(["--only", agent_id] + sys.argv[1:])
 
 
+def online_summary(instance_dir) -> dict:
+    """ONLINE_SUMMARY (2026-11-26): what harness shows of the copy you really use (online). Run by GitHub Actions
+    after the chain, on the instance restored from Neon. NUMBERS ONLY: the repository is public, so no message, no
+    company, no mail subject ever leaves; open incidents are counted per agent and category."""
+    import sqlite3
+    from contextlib import closing
+    from datetime import date, datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    database = Path(instance_dir) / "job_pilot.db"
+    result = {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat(), "data": database.is_file()}
+    if not database.is_file():
+        return result
+    paris = ZoneInfo("Europe/Paris")
+    today = datetime.now(paris).date()
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+        incidents = {}
+        for agent, category in db.execute("SELECT agent_id, error_category FROM incidents WHERE status='open'"):
+            key = f"{agent}:{category}"
+            incidents[key] = incidents.get(key, 0) + 1
+        costs = {"today": 0.0, "week": 0.0, "month": 0.0, "calls_month": 0, "unpriced_month": 0}
+        since = (today - timedelta(days=31)).isoformat()
+        for created, cost in db.execute("SELECT created_at, estimated_cost FROM llm_calls WHERE created_at>=?", (since,)):
+            try:
+                day = datetime.fromisoformat(str(created).replace("Z", "+00:00")).astimezone(paris).date()
+            except ValueError:
+                continue
+            age = (today - day).days
+            if age < 30:
+                costs["month"] += cost or 0.0
+                costs["calls_month"] += 1
+                costs["unpriced_month"] += cost is None
+            if age < 7:
+                costs["week"] += cost or 0.0
+            if age == 0:
+                costs["today"] += cost or 0.0
+        last = db.execute("SELECT status, completed_at FROM sup_runs WHERE completed_at IS NOT NULL "
+                          "ORDER BY completed_at DESC LIMIT 1").fetchone()
+    result.update(open_incidents=sum(incidents.values()), incidents_by_agent=incidents,
+                  costs={k: round(v, 4) if isinstance(v, float) else v for k, v in costs.items()},
+                  last_run={"status": last[0], "completed_at": last[1]} if last else None)
+    return result
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="job_pilot orchestrator")
     p.add_argument("--chain", help="daily | rescore | inbox | weekly | application")
@@ -599,7 +642,12 @@ def main(argv=None) -> int:
     p.add_argument("--offer", help="offer id for the application chain (agent006)")
     p.add_argument("--letter", action="store_true", help="write a cover letter even if the offer does not ask")
     p.add_argument("--sync", action="store_true", help="online: lease, restore the snapshot, run, save it (GitHub Actions)")
+    p.add_argument("--summary", action="store_true", help="numbers only (incidents, AI costs, last run) for harness")
     a = p.parse_args(argv)
+    if a.summary:
+        from app.agent import INSTANCE_DIR
+        print(json.dumps(online_summary(INSTANCE_DIR), indent=2))
+        return 0
     if a.sync:                                   # SNAPSHOT_SYNC (common_cloud.py)
         from app.agent import INSTANCE_DIR
         from app.agent import common_cloud as cloud
