@@ -218,7 +218,10 @@ class Orchestrator:
                 upsert(c, self.schemas["rows"], "alerts", {"kind": a["kind"], "category": a["category"],
                        "application_id": a.get("application_id"), "ref": a.get("ref"), "message": a["message"][:400],
                        "created_at": utc_now(), "seen_at": None})
-        exe = shutil.which("notify-send")
+        # NOTIFY_OWN_INSTANCE_ONLY (2026-11-26): only the real instance (app/instance) notifies the desktop; the
+        # tests run in their own folders and their immediate alerts must never reach it (harness had that bug).
+        real = Path(self.instance_dir).resolve() == (Path(__file__).resolve().parents[1] / "instance").resolve()
+        exe = shutil.which("notify-send") if real else None
         for a in alerts:
             if exe and a["kind"] == "immediate":
                 try:
