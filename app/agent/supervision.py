@@ -1,4 +1,4 @@
-"""STUDIO KIT — socle de supervision (version 2.0, 2026-11-20), extrait d'auto_clip et rendu générique.
+"""STUDIO KIT — socle de supervision (version 2.1, 2026-11-26 : connexions fermées et processus vérifiés sous Windows ; 2.0, 2026-11-20), extrait d'auto_clip et rendu générique.
 
 Ce que la page Supervision du kit affiche, mesuré pour de vrai :
   - coût de chaque appel à un modèle d'IA (jetons, latence, $), rattaché au run et à l'agent ;
@@ -85,6 +85,47 @@ SCHEMA_V2 = (
     "CREATE INDEX IF NOT EXISTS idx_sup_tasks_run ON sup_tasks(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_check_outcomes_check ON check_outcomes(check_id)",
 )
+
+
+class ClosingConnection(sqlite3.Connection):
+    """WINDOWS_FILES (2.1, 2026-11-26): `with sqlite3.connect(...) as c` commits but does NOT close; Windows then
+    refuses to delete or replace the database file (WinError 32). This connection also closes at the end of the
+    block, on every system."""
+
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+
+
+def pid_alive(pid) -> bool:
+    """Does process `pid` exist? os.kill(pid, 0) on Linux/macOS; OpenProcess on Windows, where os.kill(pid, 0)
+    is not a test (WinError 87). A process of another user counts as alive."""
+    import os
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel = ctypes.windll.kernel32
+        handle = kernel.OpenProcess(0x1000, False, pid)          # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.GetLastError() == 5                     # access denied: it exists
+        code = ctypes.c_ulong()
+        kernel.GetExitCodeProcess(handle, ctypes.byref(code))
+        kernel.CloseHandle(handle)
+        return code.value == 259                                  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except (ProcessLookupError, OSError):
+        return False
+    return True
 
 
 def now_iso() -> str:
@@ -250,7 +291,7 @@ class SupervisionStore:
                 c.execute(sql)
 
     def connect(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.db_path, timeout=30)
+        c = sqlite3.connect(self.db_path, timeout=30, factory=ClosingConnection)
         c.row_factory = sqlite3.Row
         return c
 
@@ -577,18 +618,11 @@ class SupervisionStore:
     def mark_interrupted_runs(self) -> list[str]:
         """At start: runs left pending/running by a process that no longer exists are closed 'failed' (never a run
         whose owner is still alive: auto_clip RUN_OWNER_ALIVE)."""
-        import os
         closed = []
         with self.connect() as c:
             for r in c.execute("SELECT run_id, owner_pid FROM sup_runs WHERE status IN ('pending','running')").fetchall():
-                try:
-                    if r["owner_pid"]:
-                        os.kill(int(r["owner_pid"]), 0)
-                        continue
-                except PermissionError:
+                if r["owner_pid"] and pid_alive(r["owner_pid"]):
                     continue
-                except (ProcessLookupError, ValueError):
-                    pass
                 c.execute("UPDATE sup_runs SET status='failed', completed_at=? WHERE run_id=?", (now_iso(), r["run_id"]))
                 c.execute("UPDATE sup_tasks SET status='cancelled', completed_at=? WHERE run_id=? AND status IN "
                           "('pending','running','waiting_dependency','waiting_approval')", (now_iso(), r["run_id"]))
@@ -812,14 +846,5 @@ def busy_runs(db_path: str | Path, extra_sql: tuple[str, ...] = ()) -> list[str]
         con.close()
     except sqlite3.Error:
         return []
-    alive = []
-    for run_id, pid in rows:
-        try:
-            if pid:
-                os.kill(int(pid), 0)
-                alive.append(run_id)
-        except (ProcessLookupError, ValueError):
-            pass
-        except PermissionError:
-            alive.append(run_id)
+    alive = [run_id for run_id, pid in rows if pid and pid_alive(pid)]
     return alive + extra
